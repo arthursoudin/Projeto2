@@ -1,27 +1,59 @@
-# Jarvis Agent V9
+# Jarvis V10 — Render
 
-V9 integra Honcho ao fluxo real de memória, mantendo memória local como fallback.
+V10 evolui a V9 com um gerenciador de tarefas e uma base de automações.
 
-## Render — Interface
-Build: `pip install -r requirements.txt`
-Start: `streamlit run app.py --server.port $PORT --server.address 0.0.0.0`
+## Mantido da V9
+- OpenRouter
+- Honcho Memory
+- Memória local de fallback
+- Skills
+- Tools
+- Web search
+- Edge TTS
+- Gateway FastAPI
 
-## Render — Gateway
-Build: `pip install -r requirements.txt`
-Start: `uvicorn gateway:app --host 0.0.0.0 --port $PORT`
+## Novo na V10
+- tarefas com ID
+- status pendente/concluída
+- prioridade
+- prazo/data e hora
+- tarefas atrasadas
+- recorrência simples (diária e semanal)
+- conclusão/exclusão por comando
+- painel de tarefas
+- painel de automações
+- endpoint `/tasks` no gateway
 
-## Variáveis
-Obrigatória: `OPENROUTER_API_KEY`
+## Render — Interface (`projeto2-1`)
+Runtime: Python 3
+Build:
+`pip install -r requirements.txt`
 
-Para memória remota: `HONCHO_API_KEY`
+Start:
+`streamlit run app.py --server.port $PORT --server.address 0.0.0.0`
 
-Opcionais: `OPENROUTER_MODEL`, `HONCHO_WORKSPACE_ID`, `HONCHO_USER_ID`, `HONCHO_ASSISTANT_ID`, `EDGE_TTS_VOICE`, `EDGE_TTS_RATE`, `EDGE_TTS_PITCH`.
+Variáveis obrigatórias:
+- `OPENROUTER_API_KEY`
+- `HONCHO_API_KEY`
 
-## Memória
-A V9 cria peers de usuário/assistente e sessões no Honcho. Recupera contexto antes do OpenRouter e salva o turno depois da resposta. Se Honcho não estiver configurado, a memória local continua funcionando.
+Opcionais:
+- `OPENROUTER_MODEL` (padrão: `openai/gpt-oss-120b`)
+- `HONCHO_WORKSPACE_ID` (padrão: `jarvis`)
+- `HONCHO_USER_ID` (padrão: `user`)
+- `HONCHO_ASSISTANT_ID` (padrão: `jarvis`)
+- `EDGE_TTS_VOICE`
+- `EDGE_TTS_RATE`
+- `EDGE_TTS_PITCH`
 
-## Próximas versões
-V10: tarefas + automações.
-V11: controle seguro do computador.
-V12: WhatsApp real -> Jarvis -> resposta.
-V13: permissões e segurança.
+## Render — Gateway (`projeto2-2`)
+Build:
+`pip install -r requirements.txt`
+
+Start:
+`uvicorn gateway:app --host 0.0.0.0 --port $PORT`
+
+## Observação sobre automações
+A V10 registra regras, prazos e recorrências e verifica o estado quando a aplicação é acessada. Um processo contínuo de lembretes em background não é tratado como garantido em um serviço web comum do Render. A V11/V12 poderá conectar um scheduler externo ou gateway dedicado para execução confiável.
+
+## Python
+`.python-version` = 3.13.5
