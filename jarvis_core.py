@@ -14,7 +14,6 @@ from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 
-import streamlit as st
 from openai import OpenAI
 import edge_tts
 
@@ -47,8 +46,6 @@ ELEVENLABS_MODEL_ID = os.environ.get("ELEVENLABS_MODEL_ID", "eleven_multilingual
 WA_ALLOWED_CONTACTS = {x.strip() for x in os.environ.get("WHATSAPP_ALLOWED_CONTACTS", "").split(",") if x.strip()}
 
 CHANNEL_MAX_TEXT = 4000
-
-st.set_page_config(page_title="Jarvis Agent V7.1", page_icon="🤖", layout="wide")
 
 DEFAULT_AGENTS = [
     {"id": "programador", "nome": "Programador", "especialidade": "Python, JavaScript, HTML, CSS, backend e arquitetura de software", "skills": ["programacao"], "tools": ["calculadora", "hora_atual", "texto", "web_search", "web_open"]},
@@ -211,47 +208,48 @@ TOOLS = {
 }
 
 # ---------------------------
-# Estado
+# Estado compartilhado do gateway
 # ---------------------------
-if "messages" not in st.session_state: st.session_state.messages = []
-if "agents" not in st.session_state: st.session_state.agents = [dict(a) for a in DEFAULT_AGENTS]
-if "skills" not in st.session_state: st.session_state.skills = dict(DEFAULT_SKILLS)
-if "mission_history" not in st.session_state: st.session_state.mission_history = []
-if "memory" not in st.session_state: st.session_state.memory = []
-if "settings" not in st.session_state:
-    st.session_state.settings = {"max_workers": 6, "auto_review": True, "allow_tools": True, "require_tool_confirmation": True}
-if "identity" not in st.session_state:
-    st.session_state.identity = {
-        "nome": os.environ.get("JARVIS_NAME", "Jarvis"),
-        "papel": os.environ.get("JARVIS_ROLE", "assistente pessoal e orquestrador multiagente"),
-        "criador": os.environ.get("JARVIS_CREATOR", "Usuário"),
-        "empresa": os.environ.get("JARVIS_COMPANY", ""),
-        "objetivo": os.environ.get("JARVIS_OBJECTIVE", "Ajudar o usuário a planejar, resolver problemas e coordenar agentes com honestidade."),
-        "personalidade": os.environ.get("JARVIS_PERSONALITY", "inteligente, direto, educado, técnico quando necessário e levemente sarcástico"),
-        "regras": os.environ.get("JARVIS_RULES", "Não inventar ações executadas, não esconder erros e pedir confirmação antes de ações externas."),
-    }
-if "honcho_session_id" not in st.session_state: st.session_state.honcho_session_id = f"chat-{uuid.uuid4().hex[:12]}"
-if "honcho_status" not in st.session_state: st.session_state.honcho_status = "não configurado"
+class _State:
+    pass
 
+state = _State()
+state.messages = []
+state.agents = [dict(a) for a in DEFAULT_AGENTS]
+state.skills = dict(DEFAULT_SKILLS)
+state.mission_history = []
+state.memory = []
+state.settings = {"max_workers": 6, "auto_review": True, "allow_tools": True, "require_tool_confirmation": True}
+state.identity = {
+    "nome": os.environ.get("JARVIS_NAME", "Jarvis"),
+    "papel": os.environ.get("JARVIS_ROLE", "assistente pessoal e orquestrador multiagente"),
+    "criador": os.environ.get("JARVIS_CREATOR", "Usuário"),
+    "empresa": os.environ.get("JARVIS_COMPANY", ""),
+    "objetivo": os.environ.get("JARVIS_OBJECTIVE", "Ajudar o usuário a planejar, resolver problemas e coordenar agentes com honestidade."),
+    "personalidade": os.environ.get("JARVIS_PERSONALITY", "inteligente, direto, educado, técnico quando necessário e levemente sarcástico"),
+    "regras": os.environ.get("JARVIS_RULES", "Não inventar ações executadas, não esconder erros e pedir confirmação antes de ações externas."),
+}
+state.honcho_session_id = "gateway"
+state.honcho_status = "não configurado"
 
 def identity_text():
-    i = st.session_state.identity
+    i = state.identity
     return f"""IDENTIDADE DO JARVIS\nNome: {i['nome']}\nPapel: {i['papel']}\nCriador/usuário principal: {i['criador']}\nEmpresa/projeto: {i['empresa'] or 'não informado'}\nObjetivo: {i['objetivo']}\nPersonalidade: {i['personalidade']}\nRegras: {i['regras']}"""
 
 
 def get_honcho():
     if Honcho is None or not HONCHO_API_KEY:
-        st.session_state.honcho_status = "não configurado"
+        state.honcho_status = "não configurado"
         return None, None, None, None
     try:
         h = Honcho(workspace_id=HONCHO_WORKSPACE_ID, api_key=HONCHO_API_KEY)
         user_peer = h.peer("usuario")
         jarvis_peer = h.peer("jarvis")
-        session = h.session(st.session_state.honcho_session_id)
-        st.session_state.honcho_status = "conectado"
+        session = h.session(state.honcho_session_id)
+        state.honcho_status = "conectado"
         return h, user_peer, jarvis_peer, session
     except Exception as exc:
-        st.session_state.honcho_status = f"erro: {exc}"
+        state.honcho_status = f"erro: {exc}"
         return None, None, None, None
 
 
@@ -273,7 +271,7 @@ def save_exchange(user_text, assistant_text):
         if session is not None:
             session.add_messages([user_peer.message(user_text), jarvis_peer.message(assistant_text)])
     except Exception as exc:
-        st.session_state.honcho_status = f"erro ao salvar: {exc}"
+        state.honcho_status = f"erro ao salvar: {exc}"
 
 
 def ask(system_prompt, user_prompt, temperature=0.3):
@@ -294,11 +292,11 @@ def clean_json(text):
 
 
 def skill_text(names):
-    return "\n\n".join(st.session_state.skills[n] for n in names or [] if n in st.session_state.skills) or "Nenhuma skill específica foi carregada."
+    return "\n\n".join(state.skills[n] for n in names or [] if n in state.skills) or "Nenhuma skill específica foi carregada."
 
 
 def memory_text():
-    return "\n".join(f"- {m}" for m in st.session_state.memory[-20:]) or "Nenhuma memória relevante registrada nesta sessão."
+    return "\n".join(f"- {m}" for m in state.memory[-20:]) or "Nenhuma memória relevante registrada nesta sessão."
 
 
 def tool_catalog(names=None):
@@ -317,7 +315,7 @@ def plan_mission(objective, agents):
 
 
 def decide_tool_calls(agent, objective, task, allowed_tools):
-    if not st.session_state.settings["allow_tools"] or not allowed_tools:
+    if not state.settings["allow_tools"] or not allowed_tools:
         return []
     catalog = tool_catalog(allowed_tools)
     raw = ask(
@@ -370,18 +368,18 @@ def execute_engine(objective, agents):
     by_id = {t.get("agente"): t for t in tasks if isinstance(t, dict)}
     results = {}
     selected = [a for a in agents if a["id"] in by_id]
-    max_workers = min(max(1, st.session_state.settings["max_workers"]), max(1, len(selected)))
+    max_workers = min(max(1, state.settings["max_workers"]), max(1, len(selected)))
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = {pool.submit(run_worker, a, objective, by_id[a["id"]].get("tarefa", ""), plan_raw, by_id[a["id"]].get("tools", [])): a["nome"] for a in selected}
         for future in as_completed(futures):
             name = futures[future]
             try: results[name] = future.result()
             except Exception as exc: results[name] = {"resposta": f"ERRO: {exc}", "tool_calls": []}
-    revision = review(objective, tasks, results) if st.session_state.settings["auto_review"] else "Revisão desativada."
+    revision = review(objective, tasks, results) if state.settings["auto_review"] else "Revisão desativada."
     final = synthesize(objective, tasks, results, revision)
     finished = datetime.now()
     report = {"inicio": started.strftime("%d/%m/%Y %H:%M:%S"), "fim": finished.strftime("%d/%m/%Y %H:%M:%S"), "modelo": MODEL, "missao": objective, "tarefas": tasks, "resultados": results, "revisao": revision, "final": final}
-    st.session_state.mission_history.insert(0, report)
+    state.mission_history.insert(0, report)
     return report
 
 
@@ -432,7 +430,7 @@ def channel_status():
 def process_inbound_message(channel, sender_id, text, reply_fn):
     if not text or not str(text).strip():
         return {"ok": False, "ignored": "mensagem vazia"}
-    answer = execute_engine(str(text).strip(), st.session_state.agents)["final"]
+    answer = execute_engine(str(text).strip(), state.agents)["final"]
     save_exchange(f"[{channel}:{sender_id}] {text}", answer)
     reply_fn(sender_id, answer)
     return {"ok": True, "channel": channel, "sender": sender_id}
@@ -442,191 +440,3 @@ if os.environ.get("JARVIS_GATEWAY_IMPORT") == "1":
     # O gateway importa este módulo apenas para reutilizar o motor e adaptadores.
     pass
 
-# ============================================================
-# UI
-# ============================================================
-st.title("🤖 Jarvis Agent V7")
-st.caption(f"Multiagente • Skills • Tools • Web • Memória • Canais • Voz • {MODEL}")
-
-with st.sidebar:
-    st.header("⚙️ Configuração")
-    st.session_state.settings["max_workers"] = st.slider("Agentes em paralelo", 1, 10, st.session_state.settings["max_workers"])
-    st.session_state.settings["auto_review"] = st.checkbox("Revisor automático", value=st.session_state.settings["auto_review"])
-    st.session_state.settings["allow_tools"] = st.checkbox("Permitir ferramentas", value=st.session_state.settings["allow_tools"])
-    st.session_state.settings["require_tool_confirmation"] = st.checkbox("Exigir confirmação para ferramentas externas", value=st.session_state.settings["require_tool_confirmation"])
-
-    st.divider(); st.header("🪪 Identidade")
-    i = st.session_state.identity
-    i["nome"] = st.text_input("Nome", value=i["nome"], key="identity_nome")
-    i["papel"] = st.text_input("Papel", value=i["papel"], key="identity_papel")
-    i["criador"] = st.text_input("Criador / usuário", value=i["criador"], key="identity_criador")
-    i["empresa"] = st.text_input("Empresa / projeto", value=i["empresa"], key="identity_empresa")
-    i["objetivo"] = st.text_area("Objetivo", value=i["objetivo"], key="identity_objetivo", height=70)
-    i["personalidade"] = st.text_area("Personalidade", value=i["personalidade"], key="identity_personalidade", height=70)
-    i["regras"] = st.text_area("Regras", value=i["regras"], key="identity_regras", height=70)
-
-    st.divider(); st.header("🧠 Memória")
-    if HONCHO_API_KEY:
-        st.success(f"Honcho: {st.session_state.honcho_status}")
-        memory_question = st.text_input("Consultar memória", key="memory_question")
-        if st.button("Consultar Honcho") and memory_question: st.info(recall_memory(memory_question))
-    else: st.warning("Honcho não configurado.")
-
-    st.divider(); st.header("🌐 Web")
-    st.caption("O Jarvis pode pesquisar e ler páginas públicas. A camada bloqueia localhost e endereços privados.")
-
-    st.divider(); st.header("🛠️ Tools disponíveis")
-    for name, tool in TOOLS.items():
-        st.write(f"**{name}** — {tool['descricao']}")
-
-    st.divider(); st.header("👥 Equipe")
-    for idx, agent in enumerate(st.session_state.agents):
-        with st.expander(agent["nome"]):
-            st.write(agent["especialidade"])
-            st.caption("Skills: " + ", ".join(agent.get("skills", [])))
-            st.caption("Tools: " + ", ".join(agent.get("tools", [])))
-            if st.button("Remover", key=f"remove_agent_{idx}"):
-                st.session_state.agents.pop(idx); st.rerun()
-
-    with st.expander("➕ Novo agente"):
-        new_name = st.text_input("Nome", key="new_agent_name")
-        new_spec = st.text_input("Especialidade", key="new_agent_spec")
-        new_skills = st.multiselect("Skills", list(st.session_state.skills), key="new_agent_skills")
-        new_tools = st.multiselect("Tools", list(TOOLS), key="new_agent_tools")
-        if st.button("Adicionar agente") and new_name and new_spec:
-            slug = re.sub(r"[^a-z0-9]+", "_", new_name.lower()).strip("_") or f"agente_{len(st.session_state.agents)+1}"
-            st.session_state.agents.append({"id": slug, "nome": new_name, "especialidade": new_spec, "skills": new_skills, "tools": new_tools}); st.rerun()
-
-    st.divider(); st.header("🧩 Skills")
-    for name in st.session_state.skills: st.write("• " + name)
-    with st.expander("➕ Criar skill"):
-        skill_name = st.text_input("Nome", key="skill_name")
-        skill_content = st.text_area("Instruções", key="skill_content", height=100)
-        if st.button("Salvar skill") and skill_name and skill_content:
-            slug = re.sub(r"[^a-z0-9]+", "_", skill_name.lower()).strip("_")
-            st.session_state.skills[slug] = skill_content; st.rerun()
-
-    st.divider(); st.header("🧠 Memória da sessão")
-    memory_item = st.text_input("Adicionar memória", key="memory_item")
-    if st.button("Guardar memória") and memory_item:
-        st.session_state.memory.append(memory_item); st.rerun()
-
-chat_tab, team_tab, history_tab, tools_tab, web_tab, channels_tab = st.tabs(["💬 Chat", "🧩 Motor", "📜 Histórico", "🛠️ Tools", "🌐 Web", "📡 Canais"])
-
-with chat_tab:
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]): st.markdown(message["content"])
-    if prompt := st.chat_input("Fale com o Jarvis..."):
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"): st.markdown(prompt)
-        with st.chat_message("assistant"):
-            with st.spinner("Chefe planejando, agentes trabalhando e ferramentas sendo avaliadas..."):
-                try:
-                    report = execute_engine(prompt, st.session_state.agents)
-                    answer = report["final"]
-                    st.markdown(answer)
-                    st.session_state.messages.append({"role": "assistant", "content": answer})
-                    save_exchange(prompt, answer)
-                    audio_file = "/tmp/jarvis_resposta.mp3"
-                    try:
-                        asyncio.run(make_audio(answer, audio_file)); st.audio(audio_file, format="audio/mp3", autoplay=True)
-                    except Exception as audio_error: st.caption(f"Áudio indisponível: {audio_error}")
-                except Exception as exc: st.error(f"Erro no motor: {exc}")
-
-with team_tab:
-    st.subheader("🧩 Motor multiagente")
-    cols = st.columns(5)
-    cols[0].metric("Agentes", len(st.session_state.agents)); cols[1].metric("Skills", len(st.session_state.skills)); cols[2].metric("Tools", len(TOOLS)); cols[3].metric("Memórias", len(st.session_state.memory)); cols[4].metric("Missões", len(st.session_state.mission_history))
-    st.divider(); st.markdown("### Equipe ativa")
-    for agent in st.session_state.agents:
-        st.markdown(f"**{agent['nome']}** — {agent['especialidade']}")
-        st.caption("Skills: " + (", ".join(agent.get("skills", [])) or "nenhuma") + " | Tools: " + (", ".join(agent.get("tools", [])) or "nenhuma"))
-    if st.session_state.mission_history:
-        last = st.session_state.mission_history[0]
-        st.divider(); st.info(last["missao"]); st.markdown("### Plano"); st.json(last["tarefas"])
-
-with history_tab:
-    st.subheader("📜 Histórico")
-    for idx, item in enumerate(st.session_state.mission_history):
-        with st.expander(f"#{idx+1} • {item['inicio']} • {item['missao'][:80]}"):
-            st.markdown("### Resultado final"); st.markdown(item["final"])
-            st.markdown("### Ferramentas usadas")
-            for name, result in item["resultados"].items():
-                st.markdown(f"**{name}**")
-                st.json(result.get("tool_calls", []))
-            st.markdown("### Revisão"); st.markdown(item["revisao"])
-
-with tools_tab:
-    st.subheader("🛠️ Central de ferramentas")
-    st.write("Nesta V5 as ferramentas são executadas por uma camada controlada. O agente não recebe acesso arbitrário ao servidor.")
-    for name, tool in TOOLS.items():
-        with st.expander(name):
-            st.write(tool["descricao"]); st.code(tool["schema"], language="json")
-            st.caption("Executada apenas quando o agente a seleciona e o agente possui permissão para ela.")
-
-
-with web_tab:
-    st.subheader("🌐 Pesquisa Web")
-    st.write("Teste manualmente as ferramentas de pesquisa e leitura. O mesmo mecanismo pode ser usado pelos agentes durante uma missão.")
-    web_query = st.text_input("Pesquisar na web", key="web_query")
-    web_n = st.slider("Resultados", 1, 8, 5, key="web_n")
-    if st.button("Pesquisar", key="web_search_button") and web_query:
-        try:
-            data = tool_web_search({"consulta": web_query, "max_resultados": web_n})
-            st.session_state["last_web_results"] = data.get("resultados", [])
-            for i, item in enumerate(data.get("resultados", []), 1):
-                st.markdown(f"### {i}. {item['titulo']}")
-                st.write(item.get("resumo", ""))
-                st.code(item["url"], language="text")
-        except Exception as exc:
-            st.error(f"Erro na pesquisa: {exc}")
-
-    st.divider()
-    web_url = st.text_input("Abrir URL pública", key="web_url")
-    if st.button("Ler página", key="web_open_button") and web_url:
-        try:
-            page = tool_web_open({"url": web_url})
-            st.markdown(f"### {page.get('titulo', 'Página')}")
-            st.caption(page.get("url", web_url))
-            st.text_area("Conteúdo extraído", page.get("conteudo", ""), height=350)
-        except Exception as exc:
-            st.error(f"Erro ao abrir página: {exc}")
-
-
-with channels_tab:
-    st.subheader("📡 Canais e voz")
-    st.caption("Os canais são adaptadores do mesmo Jarvis. As chaves ficam no Render; o modelo não recebe acesso direto aos segredos.")
-    statuses = channel_status()
-    c1, c2, c3, c4 = st.columns(4)
-    for col, (name, ok) in zip((c1,c2,c3,c4), statuses.items()):
-        col.metric(name, "OK" if ok else "Não configurado")
-
-    st.divider()
-    st.markdown("### WhatsApp")
-    st.write("Webhook de entrada: `/webhook/whatsapp`. Para saída, o adaptador usa a WhatsApp Cloud API.")
-    wa_to = st.text_input("Destinatário WhatsApp", key="v7_wa_to", placeholder="número com código do país")
-    wa_text = st.text_area("Mensagem WhatsApp", key="v7_wa_text", height=90)
-    if st.button("Enviar teste no WhatsApp", key="v7_wa_send"):
-        try:
-            send_whatsapp_text(wa_to, wa_text)
-            st.success("Mensagem aceita pela API do WhatsApp.")
-        except Exception as exc:
-            st.error(f"WhatsApp: {exc}")
-
-    st.divider()
-    st.markdown("### ElevenLabs")
-    st.write("Quando `ELEVENLABS_API_KEY` e `ELEVENLABS_VOICE_ID` estão definidos, o áudio do chat usa ElevenLabs. Caso contrário, cai para Edge TTS.")
-    voice_text = st.text_area("Texto para testar a voz", value="Olá. Eu sou o Jarvis.", key="v7_voice_text", height=90)
-    if st.button("Gerar voz ElevenLabs", key="v7_voice_test"):
-        try:
-            path = "/tmp/jarvis_elevenlabs_test.mp3"
-            make_elevenlabs_audio(voice_text, path)
-            st.audio(path, format="audio/mp3")
-            st.success("Áudio gerado.")
-        except Exception as exc:
-            st.error(f"ElevenLabs: {exc}")
-
-    st.divider()
-    st.markdown("### Endpoints do Gateway")
-    st.code("GET  /health\nGET  /webhook/whatsapp\nPOST /webhook/whatsapp\n", language="text")
-    st.info("O gateway é um segundo serviço Render no V7.1. Ele recebe webhooks e encaminha as mensagens para o mesmo núcleo do Jarvis.")

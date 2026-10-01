@@ -1,17 +1,72 @@
-# Jarvis Agent V6
+# Jarvis Agent V7.1 — WhatsApp + ElevenLabs
 
-V6 adiciona pesquisa e leitura web controladas ao motor multiagente.
+V7.1 mantém o núcleo do Jarvis da V7 e remove Telegram e Slack.
 
-## Novidades
-- `web_search`: pesquisa web pública via DuckDuckGo HTML.
-- `web_open`: abre páginas públicas HTTP/HTTPS e extrai texto principal.
-- Proteção básica contra localhost e IPs privados/reservados.
-- Tools web disponíveis para os agentes por permissão.
-- Aba `🌐 Web` para testes manuais.
+## Incluído
+- Interface Streamlit
+- OpenRouter como cérebro
+- Honcho para memória
+- Multiagentes, Skills e Tools
+- Pesquisa/abertura de páginas públicas
+- WhatsApp Cloud API
+- ElevenLabs para voz, com Edge TTS como fallback
+- Gateway FastAPI separado para o webhook do WhatsApp
 
-## Render
-Root Directory: `Jarvis_Agent_v6`
-Build: `pip install -r requirements.txt`
-Start: `streamlit run app.py --server.port $PORT --server.address 0.0.0.0`
+## Não incluído
+- Telegram
+- Slack
 
-Mantenha as variáveis existentes `OPENROUTER_API_KEY`, `HONCHO_API_KEY` e `HONCHO_WORKSPACE_ID`.
+## Render — Interface
+Root Directory: `Jarvis_Agent_v7_1`
+
+Build Command:
+```text
+pip install -r requirements.txt
+```
+
+Start Command:
+```text
+streamlit run app.py --server.port $PORT --server.address 0.0.0.0
+```
+
+## Render — Gateway
+Crie um segundo Web Service apontando para a mesma pasta.
+
+Build Command:
+```text
+pip install -r requirements.txt
+```
+
+Start Command:
+```text
+uvicorn gateway:app --host 0.0.0.0 --port $PORT
+```
+
+## Variáveis de ambiente
+Obrigatórias para o núcleo:
+- `OPENROUTER_API_KEY`
+- `OPENROUTER_MODEL` (opcional)
+- `HONCHO_API_KEY`
+- `HONCHO_WORKSPACE_ID`
+
+WhatsApp:
+- `WHATSAPP_ACCESS_TOKEN`
+- `WHATSAPP_PHONE_NUMBER_ID`
+- `WHATSAPP_VERIFY_TOKEN`
+- `WHATSAPP_API_VERSION` (opcional)
+- `WHATSAPP_ALLOWED_CONTACTS` (opcional, CSV; vazio = não filtra)
+
+ElevenLabs:
+- `ELEVENLABS_API_KEY`
+- `ELEVENLABS_VOICE_ID`
+- `ELEVENLABS_MODEL_ID` (opcional)
+
+## Endpoints
+```text
+GET  /health
+GET  /webhook/whatsapp
+POST /webhook/whatsapp
+```
+
+## Segurança
+Nunca coloque tokens ou chaves no código ou no GitHub. Use Environment Variables do Render.
