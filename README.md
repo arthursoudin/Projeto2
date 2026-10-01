@@ -1,25 +1,17 @@
-# Jarvis Agent v3
+# Jarvis Agent V6
 
-Versão para Render com OpenRouter.
+V6 adiciona pesquisa e leitura web controladas ao motor multiagente.
 
-## O que existe
-- Chefe/Orquestrador
-- trabalhadores configuráveis
-- execução paralela
-- Revisor
-- consolidação final
-- Skills configuráveis
-- memória de sessão
-- histórico de missões
-- voz Edge TTS
+## Novidades
+- `web_search`: pesquisa web pública via DuckDuckGo HTML.
+- `web_open`: abre páginas públicas HTTP/HTTPS e extrai texto principal.
+- Proteção básica contra localhost e IPs privados/reservados.
+- Tools web disponíveis para os agentes por permissão.
+- Aba `🌐 Web` para testes manuais.
 
-## Variáveis do Render
-- `OPENROUTER_API_KEY` obrigatória
-- `OPENROUTER_MODEL` opcional; se não informar, usa `meta-llama/llama-3.3-70b-instruct:free`
+## Render
+Root Directory: `Jarvis_Agent_v6`
+Build: `pip install -r requirements.txt`
+Start: `streamlit run app.py --server.port $PORT --server.address 0.0.0.0`
 
-## Próximas etapas
-1. memória persistente/Honcho
-2. ferramentas com permissões
-3. canais
-4. voz de entrada/tempo real
-5. interface/avatar
+Mantenha as variáveis existentes `OPENROUTER_API_KEY`, `HONCHO_API_KEY` e `HONCHO_WORKSPACE_ID`.
