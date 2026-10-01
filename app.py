@@ -236,7 +236,7 @@ def execute_tool(text):
     return None,None
 
 def system_prompt(memory_context=''):
-    return '''Você é Jarvis, assistente pessoal em português do Brasil. Seja direto, inteligente, útil e honesto. Use memória e tarefas como contexto, sem inventar fatos. Se algo estiver incerto, diga isso. Quando uma ferramenta já tiver executado uma ação, explique o resultado sem fingir que fará outra ação.\nSkills: %s\nMemória local: %s\nTarefas: %s\nResumo de tarefas: %s\nMemória Honcho recuperada: %s''' % (json.dumps(list(SKILLS),ensure_ascii=False),json.dumps(st.session_state.memory,ensure_ascii=False),json.dumps(st.session_state.tasks,ensure_ascii=False),json.dumps(task_summary(),ensure_ascii=False),memory_context or 'nenhuma')
+    return '''Você é Jarvis, assistente pessoal em português do Brasil. Seja direto, inteligente, útil e honesto. Use memória e tarefas como contexto, sem inventar fatos. Se algo estiver incerto, diga isso. Quando uma ferramenta já tiver executado uma ação, explique o resultado sem fingir que fará outra ação.\nSkills: %s\nControle local do PC: somente por agente autorizado e ações permitidas.\nMemória local: %s\nTarefas: %s\nResumo de tarefas: %s\nMemória Honcho recuperada: %s''' % (json.dumps(list(SKILLS),ensure_ascii=False),json.dumps(st.session_state.memory,ensure_ascii=False),json.dumps(st.session_state.tasks,ensure_ascii=False),json.dumps(task_summary(),ensure_ascii=False),memory_context or 'nenhuma')
 
 def ask_llm(user_text,tool_result=None,memory_context=''):
     if not client: return 'OPENROUTER_API_KEY não configurada.'
@@ -248,10 +248,40 @@ def ask_llm(user_text,tool_result=None,memory_context=''):
 async def make_audio(text,filename):
     await edge_tts.Communicate(text=str(text),voice=VOICE,rate=VOICE_RATE,pitch=VOICE_PITCH).save(filename); return filename
 
-st.set_page_config(page_title='Jarvis V10',page_icon='J',layout='wide')
-st.title('Jarvis V10'); st.caption('Agente pessoal • Honcho Memory • Tarefas • Automações • Skills • Tools • Web • Edge TTS')
+GATEWAY_URL=os.getenv('JARVIS_GATEWAY_URL','').rstrip('/')
+LOCAL_AGENT_TOKEN=os.getenv('LOCAL_AGENT_TOKEN','')
+
+def queue_pc_action(action, params=None):
+    if not GATEWAY_URL or not LOCAL_AGENT_TOKEN:
+        return {'ok':False,'error':'Configure JARVIS_GATEWAY_URL e LOCAL_AGENT_TOKEN no Render.'}
+    if not requests:
+        return {'ok':False,'error':'requests não está disponível.'}
+    try:
+        r=requests.post(f'{GATEWAY_URL}/agent/commands',json={'action':action,'params':params or {}},headers={'X-Agent-Token':LOCAL_AGENT_TOKEN},timeout=10)
+        return r.json()
+    except Exception as e:
+        return {'ok':False,'error':str(e)}
+
+def detect_pc_action(text):
+    l=text.lower().strip()
+    apps={'vscode':['vs code','vscode','visual studio code'],'notepad':['bloco de notas','notepad'],'calculator':['calculadora','calculator'],'browser':['navegador','chrome','google chrome']}
+    if any(x in l for x in ['abra ','abrir ','inicie ','iniciar ']):
+        for app,keys in apps.items():
+            if any(k in l for k in keys): return ('open_app',{'app':app})
+    if l.startswith('crie uma pasta ') or l.startswith('criar uma pasta '):
+        name=re.sub(r'^(crie|criar) uma pasta ','',l,flags=re.I).strip(' .')
+        if name: return ('create_folder',{'name':name})
+    return None
+
+def save_memory_item(key,value):
+    st.session_state.memory[str(key)]=str(value)
+    save_json(MEMORY_FILE,st.session_state.memory)
+    return f'Memória local salva: {value}'
+
+st.set_page_config(page_title='Jarvis V11',page_icon='J',layout='wide')
+st.title('Jarvis V11'); st.caption('Agente pessoal • Honcho Memory • Tarefas • Controle seguro do PC • Skills • Tools • Web • Edge TTS')
 with st.sidebar:
-    st.header('Sistema'); st.metric('Modelo',MODEL.split('/')[-1][:24]); st.metric('Skills',len(SKILLS)); st.metric('Tarefas',len(st.session_state.tasks)); st.metric('Pendentes',task_summary()['pendentes']); st.metric('Memórias locais',len(st.session_state.memory))
+    st.header('Sistema'); st.metric('Modelo',MODEL.split('/')[-1][:24]); st.metric('Skills',len(SKILLS)); st.metric('Tarefas',len(st.session_state.tasks)); st.metric('Pendentes',task_summary()['pendentes']); st.metric('Memórias locais',len(st.session_state.memory)); st.write('**PC Agent:**', 'configurado' if (GATEWAY_URL and LOCAL_AGENT_TOKEN) else 'não configurado')
     st.write('**Honcho:**',st.session_state.honcho_status)
     if HONCHO_API_KEY: st.success('HONCHO_API_KEY configurada')
     else: st.warning('HONCHO_API_KEY não configurada')
@@ -265,7 +295,10 @@ with tabs[0]:
     if prompt:
         st.session_state.messages.append({'role':'user','content':prompt})
         with st.chat_message('user'): st.markdown(prompt)
-        skills=detect_skills(prompt); tool,result=execute_tool(prompt); context=honcho_context(prompt); st.session_state.honcho_context=context
+        skills=detect_skills(prompt); pc_action=detect_pc_action(prompt); tool,result=execute_tool(prompt)
+        if pc_action:
+            a,params=pc_action; pc_result=queue_pc_action(a,params); tool='computer'; result=str(pc_result)
+        context=honcho_context(prompt); st.session_state.honcho_context=context
         st.session_state.last_action={'skills':skills,'tool':tool,'result':result,'session_id':st.session_state.session_id}
         with st.chat_message('assistant'):
             try:
@@ -311,4 +344,4 @@ with tabs[5]:
     for n,s in SKILLS.items():
         with st.expander(n): st.write(s['description']); st.write(', '.join(s['keywords']))
 with tabs[6]:
-    st.json(st.session_state.last_action or {'status':'Nenhuma ação executada'}); st.write('Voz:',VOICE); st.write('Modelo:',MODEL); st.write('Horário:',current_time())
+    st.json(st.session_state.last_action or {'status':'Nenhuma ação executada'}); st.write('Voz:',VOICE); st.write('Modelo:',MODEL); st.write('Horário:',current_time()); st.write('Gateway:',GATEWAY_URL or 'não configurado'); st.write('Agente local:', 'configurado' if LOCAL_AGENT_TOKEN else 'não configurado')
