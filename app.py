@@ -386,10 +386,20 @@ def execute_engine(objective, agents):
 
 
 async def make_audio(text, filename):
-    if ELEVENLABS_API_KEY and ELEVENLABS_VOICE_ID:
-        make_elevenlabs_audio(text, filename)
-    else:
-        await edge_tts.Communicate(text, "pt-BR-AntonioNeural").save(filename)
+    """Gera a voz principal do Jarvis usando Edge TTS."""
+    voice = os.environ.get("EDGE_TTS_VOICE", "pt-BR-AntonioNeural")
+    rate = os.environ.get("EDGE_TTS_RATE", "+0%")
+    pitch = os.environ.get("EDGE_TTS_PITCH", "+0Hz")
+
+    communicate = edge_tts.Communicate(
+        text=str(text),
+        voice=voice,
+        rate=rate,
+        pitch=pitch
+    )
+
+    await communicate.save(filename)
+    return filename
 
 # ============================================================
 # V7 — Canais
