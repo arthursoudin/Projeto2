@@ -7,7 +7,7 @@ import uuid
 import socket
 import ipaddress
 from urllib.parse import quote_plus, urlparse
-
+from bs4 import BeautifulSoup
 import requests
 from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor, as_completed

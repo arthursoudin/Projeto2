@@ -1,6 +1,7 @@
 streamlit
-openai
+openai>=1.56.1,<2.0
+httpx>=0.28,<1
 edge-tts
 protobuf>=5.29.0
 honcho-ai>=2.3.0
-httpx>=0.28,<1
+beautifulsoup4
