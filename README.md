@@ -40,3 +40,7 @@ O agente não instala serviço de administrador. Ele roda como usuário normal.
 - Criar pasta dentro de `%USERPROFILE%\\Jarvis`
 
 A lista é propositalmente pequena nesta primeira versão. Não há shell remoto genérico.
+
+
+## V11.1 — Controle local expandido
+Além de abrir aplicativos e criar pastas, o agente local permite abrir pastas/arquivos somente dentro de `~/Jarvis`, criar arquivos nesse espaço e consultar informações básicas do computador. Não existe execução arbitrária de shell.

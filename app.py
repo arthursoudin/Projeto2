@@ -264,13 +264,18 @@ def queue_pc_action(action, params=None):
 
 def detect_pc_action(text):
     l=text.lower().strip()
-    apps={'vscode':['vs code','vscode','visual studio code'],'notepad':['bloco de notas','notepad'],'calculator':['calculadora','calculator'],'browser':['navegador','chrome','google chrome']}
+    apps={'vscode':['vs code','vscode','visual studio code'],'notepad':['bloco de notas','notepad'],'calculator':['calculadora','calculator'],'browser':['navegador','chrome','google chrome'],'paint':['paint']}
     if any(x in l for x in ['abra ','abrir ','inicie ','iniciar ']):
         for app,keys in apps.items():
             if any(k in l for k in keys): return ('open_app',{'app':app})
+    m=re.match(r'^(?:abra|abrir) (?:a )?(?:pasta )?(.+)$',l)
+    if m and ('pasta' in l): return ('open_folder',{'name':m.group(1).replace('pasta ','',1).strip(' .')})
     if l.startswith('crie uma pasta ') or l.startswith('criar uma pasta '):
-        name=re.sub(r'^(crie|criar) uma pasta ','',l,flags=re.I).strip(' .')
+        name=re.sub(r'^(crie|criar) uma pasta ','',l,flags=re.I).strip(' .');
         if name: return ('create_folder',{'name':name})
+    if l.startswith('crie um arquivo ') or l.startswith('criar um arquivo '):
+        name=re.sub(r'^(crie|criar) um arquivo ','',l,flags=re.I).strip(' .'); return ('create_file',{'name':name,'content':''}) if name else None
+    if 'informações do meu pc' in l or 'informações do computador' in l or 'info do pc' in l: return ('system_info',{})
     return None
 
 def save_memory_item(key,value):
@@ -279,7 +284,7 @@ def save_memory_item(key,value):
     return f'Memória local salva: {value}'
 
 st.set_page_config(page_title='Jarvis V11',page_icon='J',layout='wide')
-st.title('Jarvis V11'); st.caption('Agente pessoal • Honcho Memory • Tarefas • Controle seguro do PC • Skills • Tools • Web • Edge TTS')
+st.title('Jarvis V11.1'); st.caption('Agente pessoal • Honcho Memory • Tarefas • Controle seguro do PC • Arquivos/Pastas • Skills • Tools • Web • Edge TTS')
 with st.sidebar:
     st.header('Sistema'); st.metric('Modelo',MODEL.split('/')[-1][:24]); st.metric('Skills',len(SKILLS)); st.metric('Tarefas',len(st.session_state.tasks)); st.metric('Pendentes',task_summary()['pendentes']); st.metric('Memórias locais',len(st.session_state.memory)); st.write('**PC Agent:**', 'configurado' if (GATEWAY_URL and LOCAL_AGENT_TOKEN) else 'não configurado')
     st.write('**Honcho:**',st.session_state.honcho_status)
