@@ -1,72 +1,27 @@
-# Jarvis Agent V7.1 — WhatsApp + ElevenLabs
+# Jarvis Agent V9
 
-V7.1 mantém o núcleo do Jarvis da V7 e remove Telegram e Slack.
-
-## Incluído
-- Interface Streamlit
-- OpenRouter como cérebro
-- Honcho para memória
-- Multiagentes, Skills e Tools
-- Pesquisa/abertura de páginas públicas
-- WhatsApp Cloud API
-- ElevenLabs para voz, com Edge TTS como fallback
-- Gateway FastAPI separado para o webhook do WhatsApp
-
-## Não incluído
-- Telegram
-- Slack
+V9 integra Honcho ao fluxo real de memória, mantendo memória local como fallback.
 
 ## Render — Interface
-Root Directory: `Jarvis_Agent_v7_1`
-
-Build Command:
-```text
-pip install -r requirements.txt
-```
-
-Start Command:
-```text
-streamlit run app.py --server.port $PORT --server.address 0.0.0.0
-```
+Build: `pip install -r requirements.txt`
+Start: `streamlit run app.py --server.port $PORT --server.address 0.0.0.0`
 
 ## Render — Gateway
-Crie um segundo Web Service apontando para a mesma pasta.
+Build: `pip install -r requirements.txt`
+Start: `uvicorn gateway:app --host 0.0.0.0 --port $PORT`
 
-Build Command:
-```text
-pip install -r requirements.txt
-```
+## Variáveis
+Obrigatória: `OPENROUTER_API_KEY`
 
-Start Command:
-```text
-uvicorn gateway:app --host 0.0.0.0 --port $PORT
-```
+Para memória remota: `HONCHO_API_KEY`
 
-## Variáveis de ambiente
-Obrigatórias para o núcleo:
-- `OPENROUTER_API_KEY`
-- `OPENROUTER_MODEL` (opcional)
-- `HONCHO_API_KEY`
-- `HONCHO_WORKSPACE_ID`
+Opcionais: `OPENROUTER_MODEL`, `HONCHO_WORKSPACE_ID`, `HONCHO_USER_ID`, `HONCHO_ASSISTANT_ID`, `EDGE_TTS_VOICE`, `EDGE_TTS_RATE`, `EDGE_TTS_PITCH`.
 
-WhatsApp:
-- `WHATSAPP_ACCESS_TOKEN`
-- `WHATSAPP_PHONE_NUMBER_ID`
-- `WHATSAPP_VERIFY_TOKEN`
-- `WHATSAPP_API_VERSION` (opcional)
-- `WHATSAPP_ALLOWED_CONTACTS` (opcional, CSV; vazio = não filtra)
+## Memória
+A V9 cria peers de usuário/assistente e sessões no Honcho. Recupera contexto antes do OpenRouter e salva o turno depois da resposta. Se Honcho não estiver configurado, a memória local continua funcionando.
 
-ElevenLabs:
-- `ELEVENLABS_API_KEY`
-- `ELEVENLABS_VOICE_ID`
-- `ELEVENLABS_MODEL_ID` (opcional)
-
-## Endpoints
-```text
-GET  /health
-GET  /webhook/whatsapp
-POST /webhook/whatsapp
-```
-
-## Segurança
-Nunca coloque tokens ou chaves no código ou no GitHub. Use Environment Variables do Render.
+## Próximas versões
+V10: tarefas + automações.
+V11: controle seguro do computador.
+V12: WhatsApp real -> Jarvis -> resposta.
+V13: permissões e segurança.
