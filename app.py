@@ -1,69 +1,61 @@
 import os
-import threading
 import asyncio
-import nest_asyncio
-from http.server import BaseHTTPRequestHandler, HTTPServer
-import google.generativeai as genai
+import streamlit as st
+from openai import OpenAI
 import edge_tts
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-# Permite rodar o bot e o edge-tts sem conflito de threads
-nest_asyncio.apply()
+# 1. Configuração do OpenRouter (Usa a biblioteca da OpenAI apontando pro OpenRouter)
+client = OpenAI(git status
+    base_url="https://openrouter.ai/api/v1",
+    api_key=os.environ.get("OPENROUTER_API_KEY"),
+)
 
-# 1. Configurações
-genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
-model = genai.GenerativeModel('gemini-2.0-flash')
+# 2. Configuração visual da página
+st.set_page_config(page_title="Jarvis", page_icon="🤖")
+st.title("🤖 Jarvis Interface Web")
 
-# 2. Servidor Web Falso (Para o Render não derrubar a aplicação)
-class DummyHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"Jarvis Online!")
+# 3. Memória temporária da conversa na tela
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
-def keep_alive():
-    port = int(os.environ.get("PORT", 8080))
-    server = HTTPServer(("0.0.0.0", port), DummyHandler)
-    server.serve_forever()
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
 
-# 3. Funções do Bot
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Sistemas online, senhor. Como posso ajudar?")
+# 4. Caixa de texto para o usuário digitar
+if prompt := st.chat_input("Fale com o Jarvis..."):
+    # Mostra o que você digitou
+    with st.chat_message("user"):
+        st.markdown(prompt)
+    st.session_state.messages.append({"role": "user", "content": prompt})
 
-async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    mensagem = update.message.text
-    
-    # Pede a resposta pro Gemini
-    instrucao = "Você é o Jarvis. Responda em português, de forma curta, direta e um pouco sarcástica."
-    resposta_ia = model.generate_content(f"{instrucao}\nUsuário: {mensagem}").text
-    
-    # Envia o texto
-    await update.message.reply_text(resposta_ia)
-    
-    # Gera o áudio com a voz do Antonio (Microsoft) e envia
-    arquivo_audio = f"resposta_{update.message.chat_id}.mp3"
-    communicate = edge_tts.Communicate(resposta_ia, "pt-BR-AntonioNeural")
-    await communicate.save(arquivo_audio)
-    
-    with open(arquivo_audio, "rb") as audio:
-        await update.message.reply_voice(voice=audio)
-        
-    os.remove(arquivo_audio) # Limpa o arquivo para economizar espaço
+    # Prepara o comportamento do Jarvis + histórico
+    mensagens_api = [
+        {"role": "system", "content": "Você é o Jarvis. Responda em português, de forma direta, inteligente e levemente sarcástica."}
+    ]
+    mensagens_api.extend(st.session_state.messages)
 
-def main():
-    # Inicia o servidor web falso em segundo plano
-    threading.Thread(target=keep_alive, daemon=True).start()
+    # 5. Envia pro OpenRouter e gera a resposta
+    with st.chat_message("assistant"):
+        try:
+            # Usando um modelo poderoso e 100% gratuito do OpenRouter
+            response = client.chat.completions.create(
+                model="meta-llama/llama-3.3-70b-instruct:free", 
+                messages=mensagens_api,
+            )
+            
+            resposta_ia = response.choices[0].message.content
+            st.markdown(resposta_ia)
+            st.session_state.messages.append({"role": "assistant", "content": resposta_ia})
 
-    # Inicia o Bot do Telegram
-    token = os.environ.get("TELEGRAM_TOKEN")
-    app = Application.builder().token(token).build()
-    
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, responder))
-    
-    print("Bot rodando...")
-    app.run_polling()
-
-if __name__ == "__main__":
-    main()
+            # 6. Gera e toca o áudio da resposta na mesma hora
+            arquivo_audio = "resposta.mp3"
+            async def gerar_audio():
+                communicate = edge_tts.Communicate(resposta_ia, "pt-BR-AntonioNeural")
+                await communicate.save(arquivo_audio)
+            
+            asyncio.run(gerar_audio())
+            st.audio(arquivo_audio, format="audio/mp3", autoplay=True)
+            
+        except Exception as e:
+            st.error(f"Erro de conexão: {e}")
