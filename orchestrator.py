@@ -9,7 +9,7 @@ import secrets
 from datetime import datetime, timezone
 import store
 
-VERSION = "14.0.0"
+VERSION = "14.5.2"
 EVENT_LIMIT = 300
 MISSION_LIMIT = 100
 

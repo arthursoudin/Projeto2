@@ -25,7 +25,7 @@ from urllib.parse import quote_plus, urlparse
 
 import requests
 
-VERSION = "14.5.0"
+VERSION = "14.5.2"
 BASE_DIR = pathlib.Path(__file__).resolve().parent
 CONFIG_FILE = BASE_DIR / "config.json"
 
@@ -46,7 +46,7 @@ RESERVED = {"CON", "PRN", "AUX", "NUL"} | {f"COM{i}" for i in range(1, 10)} | {f
 
 # ------------------------------------------------------------------ config
 def load_config():
-    cfg = {"gateway_url": "", "token": "", "poll_seconds": 1, "device_id": ""}
+    cfg = {"gateway_url": "", "token": "", "poll_seconds": 0.35, "device_id": ""}
     try:
         if CONFIG_FILE.exists():
             loaded = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
@@ -57,9 +57,9 @@ def load_config():
     cfg["gateway_url"] = (os.getenv("JARVIS_GATEWAY_URL") or cfg.get("gateway_url") or "").strip().rstrip("/")
     cfg["token"] = (os.getenv("LOCAL_AGENT_TOKEN") or cfg.get("token") or "").strip()
     try:
-        cfg["poll_seconds"] = max(0.5, float(cfg.get("poll_seconds", 1)))
+        cfg["poll_seconds"] = max(0.25, float(cfg.get("poll_seconds", 0.35)))
     except Exception:
-        cfg["poll_seconds"] = 1
+        cfg["poll_seconds"] = 0.35
     return cfg
 
 

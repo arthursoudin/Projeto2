@@ -13,6 +13,8 @@ try:
 except Exception:
     requests = None; BeautifulSoup = None
 
+APP_VERSION=os.getenv('JARVIS_APP_VERSION','14.5.2')
+BUILD_TAG='quality-gate'
 MODEL=os.getenv('OPENROUTER_MODEL','openai/gpt-oss-120b')
 API_KEY=os.getenv('OPENROUTER_API_KEY')
 HONCHO_API_KEY=os.getenv('HONCHO_API_KEY')
@@ -363,6 +365,39 @@ def run_team(goal):
     brain=core.Brain(run_pc=queue_pc_action,llm=core.make_llm(),agent_status=get_agent_status,channel='app')
     out=brain.team_run(goal); refresh_state(); st.session_state.last_team=out; return out
 
+def is_devices_intent(text):
+    """Detecta consultas sobre computadores conectados sem chamar o LLM."""
+    n=unicodedata.normalize('NFKD', str(text or '')).encode('ascii','ignore').decode('ascii').lower()
+    patterns=(
+        'quais sao os computadores conectados','quais computadores estao conectados',
+        'quais computadores estao online','quais pcs estao conectados',
+        'mostrar computadores conectados','liste os computadores conectados',
+        'listar computadores conectados','dispositivos conectados','pcs conectados',
+    )
+    return any(p in n for p in patterns)
+
+def connected_devices_fast():
+    if not GATEWAY_URL or not LOCAL_AGENT_TOKEN:
+        return {'ok':False,'error':'Gateway/Local Agent não configurados.'}
+    try:
+        r=requests.get(f'{GATEWAY_URL}/devices',headers={'X-Agent-Token':LOCAL_AGENT_TOKEN},timeout=6)
+        r.raise_for_status()
+        data=r.json()
+        rows=data.get('devices') or []
+        if not rows: return {'ok':True,'devices':[],'message':'Nenhum computador autorizado está conectado.'}
+        out=[]
+        for d in rows:
+            out.append({
+                'name':d.get('name') or d.get('id') or 'PC',
+                'status':d.get('status','unknown'),
+                'version':d.get('version','?'),
+                'last_seen':d.get('last_seen'),
+                'applications':d.get('application_count',0),
+            })
+        return {'ok':True,'devices':out}
+    except Exception as e:
+        return {'ok':False,'error':f'Não consegui consultar os computadores conectados: {type(e).__name__}: {e}'}
+
 def is_pc_intent(text):
     """Detecta pedidos de controle local antes do LLM para evitar respostas genéricas de 'não tenho acesso'."""
     n=unicodedata.normalize('NFKD', str(text or '')).encode('ascii','ignore').decode('ascii').lower()
@@ -486,11 +521,11 @@ button[kind="secondary"]{border-color:rgba(255,59,48,.18)!important}button[kind=
 @media(max-width:1000px){.refined-center{min-height:430px}.refined-orb{width:300px;height:300px}}
 </style>
 
-<div class="jarvis-topbar" style="display:none"><div class="jarvis-brand"><span>J</span>ARVIS // COMMAND OS</div><div class="jarvis-nav"><b>CORE</b><span>AGENTS</span><span>DEVICES</span><span>MISSIONS</span><span>MEMORY</span><span>SECURITY</span></div><div class="jarvis-clock">SYSTEM ONLINE • V14.5.0</div></div>
+<div class="jarvis-topbar" style="display:none"><div class="jarvis-brand"><span>J</span>ARVIS // COMMAND OS</div><div class="jarvis-nav"><b>CORE</b><span>AGENTS</span><span>DEVICES</span><span>MISSIONS</span><span>MEMORY</span><span>SECURITY</span></div><div class="jarvis-clock">SYSTEM ONLINE • V{APP_VERSION}</div></div>
 ''', unsafe_allow_html=True)
 st.title('JARVIS // COMMAND OS'); st.caption('Central de comando • Agentes • Dispositivos • Missões • Memória • Segurança • Automação')
 with st.sidebar:
-    st.header('Sistema'); st.metric('Modelo',MODEL.split('/')[-1][:24]); st.metric('Skills',len(SKILLS)); st.metric('Tarefas',len(st.session_state.tasks)); st.metric('Pendentes',task_summary()['pendentes']); st.metric('Memórias locais',len(st.session_state.memory)); st.write('**PC Agent:**', 'configurado' if (GATEWAY_URL and LOCAL_AGENT_TOKEN) else 'não configurado')
+    st.header('Sistema'); st.metric('Versão',APP_VERSION); st.caption(f'Build: {APP_VERSION}-{BUILD_TAG}'); st.metric('Modelo',MODEL.split('/')[-1][:24]); st.metric('Skills',len(SKILLS)); st.metric('Tarefas',len(st.session_state.tasks)); st.metric('Pendentes',task_summary()['pendentes']); st.metric('Memórias locais',len(st.session_state.memory)); st.write('**PC Agent:**', 'configurado' if (GATEWAY_URL and LOCAL_AGENT_TOKEN) else 'não configurado')
     _stt=store.status(); st.caption(('✅ ' if _stt['ok'] and _stt['backend']=='supabase' else '⚠️ ')+'Armazenamento: '+_stt['backend']+' — '+_stt['detalhe'])
     with st.expander('🔊 Voz'):
         _voice_default=os.getenv('JARVIS_VOICE_DEFAULT','0').strip().lower() in ('1','true','yes','on')
@@ -587,9 +622,12 @@ with tabs[1]:
             with st.spinner('Equipe de agentes trabalhando...'):
                 try: out=run_team(strip_trigger(prompt)); team_answer=out['reply']; tool='equipe'; result=json.dumps(out['trace'],ensure_ascii=False)[:6000]
                 except Exception as e: team_answer=f'A equipe encontrou um erro ({type(e).__name__}). Tente de novo ou peça por partes.'; tool='equipe'; result=str(e)[:300]
+        if tool is None and is_devices_intent(prompt):
+            tool='computer'; result=json.dumps(connected_devices_fast(),ensure_ascii=False); st.session_state['_last_route']='devices_fast'
         if tool is None:
             steps=parse_pc_commands(prompt)
             if steps:
+                st.session_state['_last_route']='pc_parser'
                 done,status=run_pc_plan(steps); tool='computer'
                 result=json.dumps({'acoes':done,'status':status},ensure_ascii=False)
                 if status=='confirm':
@@ -597,6 +635,7 @@ with tabs[1]:
                     result+=f' | AGUARDANDO CONFIRMAÇÃO do usuário para: {todo}. Nada disso foi executado ainda.'
                     confirm_note=f'\n\n⚠️ **Confirma?** {todo} — responda **sim** ou **não**. (Itens apagados vão para a lixeira do Jarvis e podem ser restaurados.)'
             elif is_pc_intent(prompt):
+                st.session_state['_last_route']='pc_intent'
                 clarification=pc_clarification(prompt)
                 if clarification:
                     tool='computer'; result=clarification
@@ -606,7 +645,9 @@ with tabs[1]:
                         tool='computer'; result='O pedido é de controle do seu PC, mas o Local Agent está offline. Abra `local_agent/start_agent.bat` no computador e tente novamente.'
                     else:
                         tool='computer'; result='Entendi que você quer uma ação no seu PC, mas ainda preciso do aplicativo, arquivo, pasta ou página específica. Diga exatamente o que devo abrir ou fazer.'
-            else: tool,result=execute_tool(prompt)
+            else:
+                st.session_state['_last_route']='llm_or_tool'
+                tool,result=execute_tool(prompt)
         # Caminho rápido: comandos locais e ferramentas determinísticas não passam pelo LLM.
         # Isso evita uma segunda chamada à OpenRouter só para dizer 'feito'.
         needs_memory_context = bool(HONCHO_API_KEY and (
@@ -615,7 +656,7 @@ with tabs[1]:
         ))
         context=honcho_context(prompt) if needs_memory_context else ''
         st.session_state.honcho_context=context
-        st.session_state.last_action={'skills':skills,'tool':tool,'result':result,'session_id':st.session_state.session_id}
+        st.session_state.last_action={'skills':skills,'tool':tool,'route':st.session_state.get('_last_route','unknown'),'result':result,'session_id':st.session_state.session_id,'version':APP_VERSION}
         with st.chat_message('assistant'):
             try:
                 if team_answer:
@@ -1091,7 +1132,7 @@ with tabs[0]:
     _online_devices=[d for d in _devices if d.get('status')=='online']; _info=_agent.get('info') or {}; _online=bool(_agent.get('online')); _pending=int(_sec.get('pending',0) or 0); _kill=bool(_sec.get('kill_switch'))
     _current=_live.get('current') or {}; _cur_status=str(_current.get('status','idle')).upper(); _cur_agent=str(_current.get('agent') or 'SYSTEM')[:24]; _cur_action=str(_current.get('instruction') or _current.get('result') or 'Aguardando uma missão...')[:100]; _dur=_current.get('duration_ms'); _dur_text=f'{float(_dur)/1000:.1f}s' if isinstance(_dur,(int,float)) else '--'
 
-    st.markdown('<div class="refined-top"><div class="refined-brand"><i>J</i>ARVIS // COMMAND OS</div><div class="refined-sub">CORE • AGENT LOOP • TOOLS • LIVE OPERATIONS</div><div class="refined-system"><b>●</b> SYSTEM ONLINE • V14.5</div></div>',unsafe_allow_html=True)
+    st.markdown('<div class="refined-top"><div class="refined-brand"><i>J</i>ARVIS // COMMAND OS</div><div class="refined-sub">CORE • AGENT LOOP • TOOLS • LIVE OPERATIONS</div><div class="refined-system"><b>●</b> SYSTEM ONLINE • V{APP_VERSION}</div></div>',unsafe_allow_html=True)
     st.markdown('<div class="refined-dock">',unsafe_allow_html=True); d=st.columns([1,1,1,1,1,1,1,1,1,1.15])
     with d[0]:
         with st.popover('SYSTEM'):
@@ -1151,7 +1192,7 @@ with tabs[0]:
                 st.success('Nenhum alerta no momento.')
     with d[8]:
         with st.popover('FILES'):
-            st.markdown('**FILE & DOCUMENT CENTER • V14.5**')
+            st.markdown(f'**FILE & DOCUMENT CENTER • V{APP_VERSION}**')
             _fc_path=st.text_input('Pasta', value='', placeholder='ex.: Projetos/MeuProjeto', key='fc_path')
             if st.button('LISTAR', key='fc_list'):
                 st.session_state.fc_listing=queue_pc_action('list_files', {'name':_fc_path}, wait_seconds=10)
@@ -1223,7 +1264,7 @@ with tabs[0]:
         st.markdown(f'''<div class="refined-card"><div class="refined-title">SYSTEM STATUS</div><div class="refined-row"><span>CORE</span><b class="refined-ok">ONLINE</b></div><div class="refined-row"><span>LOCAL AGENT</span><b class="{'refined-ok' if _online else 'refined-bad'}">{'ONLINE' if _online else 'OFFLINE'}</b></div><div class="refined-row"><span>SECURITY</span><b class="{'refined-bad' if _kill else 'refined-ok'}">{'LOCKED' if _kill else 'ACTIVE'}</b></div><div class="refined-row"><span>APPROVALS</span><b class="refined-warn">{_pending:02d}</b></div></div>''',unsafe_allow_html=True)
         st.markdown(f'''<div class="refined-card"><div class="refined-title">TELEMETRY</div><div class="refined-row"><span>CPU</span><b>{_info.get('cpu_percent','—')}%</b></div><div class="refined-row"><span>RAM</span><b>{_info.get('ram_em_uso_percent','—')}%</b></div><div class="refined-row"><span>DEVICES</span><b>{len(_online_devices)}/{len(_devices)}</b></div><div class="refined-row"><span>EVENTS</span><b>{len(_events):04d}</b></div></div>''',unsafe_allow_html=True)
     with center:
-        st.markdown(f'''<div class="refined-center"><div class="refined-grid"></div><div class="refined-orb"><div class="refined-ring r3"></div><div class="refined-ring r1"></div><div class="refined-ring r2"></div><div class="refined-core"><strong>{len(_running):02d}</strong><span>ACTIVE</span></div></div><div class="refined-caption">JARVIS CORE • {len(_running):02d} ACTIVE MISSIONS • V14.5</div></div>''',unsafe_allow_html=True)
+        st.markdown(f'''<div class="refined-center"><div class="refined-grid"></div><div class="refined-orb"><div class="refined-ring r3"></div><div class="refined-ring r1"></div><div class="refined-ring r2"></div><div class="refined-core"><strong>{len(_running):02d}</strong><span>ACTIVE</span></div></div><div class="refined-caption">JARVIS CORE • {len(_running):02d} ACTIVE MISSIONS • V{APP_VERSION}</div></div>''',unsafe_allow_html=True)
         st.markdown(f'''<div class="refined-card"><div class="refined-title">CURRENT OPERATION</div><div class="refined-row"><span>AGENT</span><b>{_cur_agent}</b></div><div class="refined-row"><span>STATUS</span><b class="refined-warn">{_cur_status}</b></div><div class="refined-row"><span>DURATION</span><b>{_dur_text}</b></div><div style="color:#766b6b;font-size:.57rem;margin-top:.5rem;line-height:1.4">{_cur_action}</div></div>''',unsafe_allow_html=True)
     with right:
         if 'hud_ai_history' not in st.session_state:
