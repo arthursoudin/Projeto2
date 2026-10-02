@@ -4,8 +4,9 @@ from fastapi import FastAPI, Request, Header, HTTPException, BackgroundTasks
 from fastapi.responses import PlainTextResponse
 
 import whatsapp, core, voice_io, store, security, orchestrator, devices, live_operations
+import v19_command_os as v19
 
-VERSION='14.5.3'
+VERSION='19.0.0'
 app=FastAPI(title='Jarvis Gateway',version=VERSION)
 LOCAL_AGENT_TOKEN=os.getenv('LOCAL_AGENT_TOKEN','')
 COMMANDS=[]
@@ -41,7 +42,7 @@ def health():
         'local_agent_configured': bool(LOCAL_AGENT_TOKEN),
         'queued_commands': len(COMMANDS),
         'core_integrated': True,
-        'build': '14.5.3-command-reliability',
+        'build': '19.0.0-command-os-complete',
     }
 
 @app.get('/system/status')
@@ -92,6 +93,65 @@ def device_apps(device_id: str, x_agent_token: str|None = Header(default=None)):
     if not d: raise HTTPException(status_code=404,detail='Dispositivo não encontrado')
     return {'ok':True,'device_id':device_id,'name':d.get('name'),'status':d.get('status'),'applications':d.get('applications',[])}
 
+@app.get('/os/status')
+def v19_status(x_agent_token: str|None = Header(default=None)):
+    if not auth(x_agent_token): raise HTTPException(status_code=401,detail='Não autorizado')
+    return {'ok':True,'os':v19.status(),'gateway_version':VERSION}
+
+@app.get('/os/diagnostics')
+def v19_diagnostics(x_agent_token: str|None = Header(default=None)):
+    if not auth(x_agent_token): raise HTTPException(status_code=401,detail='Não autorizado')
+    ag=agent_status_dict(); lv=(ag.get('info') or {}).get('version')
+    vers={'gateway':VERSION}
+    if lv: vers['local_agent']=str(lv)
+    return {'ok':True,'version':v19.VERSION,'build':v19.BUILD,'agent':ag,'security':security.status(),'diagnostics':v19.diagnostics(vers)}
+
+@app.get('/os/operations')
+def v19_operations(x_agent_token: str|None = Header(default=None)):
+    if not auth(x_agent_token): raise HTTPException(status_code=401,detail='Não autorizado')
+    return {'ok':True,'operations':v19.list_operations(150),'stats':v19.operation_stats()}
+
+@app.get('/os/agents')
+def v19_agents(x_agent_token: str|None = Header(default=None)):
+    if not auth(x_agent_token): raise HTTPException(status_code=401,detail='Não autorizado')
+    return {'ok':True,'agents':v19.list_agents()}
+
+@app.get('/os/missions')
+def v19_missions(x_agent_token: str|None = Header(default=None)):
+    if not auth(x_agent_token): raise HTTPException(status_code=401,detail='Não autorizado')
+    return {'ok':True,'missions':v19.list_missions()}
+
+@app.get('/os/workflows')
+def v19_workflows(x_agent_token: str|None = Header(default=None)):
+    if not auth(x_agent_token): raise HTTPException(status_code=401,detail='Não autorizado')
+    return {'ok':True,'workflows':v19.list_workflows()}
+
+@app.get('/os/snapshots')
+def v19_snapshots(x_agent_token: str|None = Header(default=None)):
+    if not auth(x_agent_token): raise HTTPException(status_code=401,detail='Não autorizado')
+    return {'ok':True,'snapshots':v19.snapshots()}
+
+@app.get('/os/resources')
+def v19_resources(record: bool=False, x_agent_token: str|None = Header(default=None)):
+    if not auth(x_agent_token): raise HTTPException(status_code=401,detail='Não autorizado')
+    if record: v19.record_resources()
+    return {'ok':True,'resources':v19.resources(60),'current':v19.collect_resources()}
+
+@app.get('/os/trace/{trace_id}')
+def v19_trace(trace_id: str, x_agent_token: str|None = Header(default=None)):
+    if not auth(x_agent_token): raise HTTPException(status_code=401,detail='Não autorizado')
+    return {'ok':True,'trace_id':trace_id,'operations':v19.trace(trace_id)}
+
+@app.get('/os/applications')
+def v19_applications(x_agent_token: str|None = Header(default=None)):
+    if not auth(x_agent_token): raise HTTPException(status_code=401,detail='Não autorizado')
+    return {'ok':True,**v19.application_center()}
+
+@app.get('/os/device-groups')
+def v19_device_groups(x_agent_token: str|None = Header(default=None)):
+    if not auth(x_agent_token): raise HTTPException(status_code=401,detail='Não autorizado')
+    return {'ok':True,'groups':v19.list_device_groups()}
+
 @app.get('/uptime')
 def uptime():
     # Endpoint público e leve para monitores externos, como UptimeRobot.
@@ -127,7 +187,7 @@ def list_tasks(x_agent_token: str|None = Header(default=None)):
 ALLOWED_ACTIONS={'open_app','list_apps','open_folder','open_file','open_url','search_web','create_folder','create_file','append_file','read_file','list_files','move_path','copy_path','rename_path','delete_path','system_info','read_log','schedule_add','schedule_list','schedule_remove','schedule_toggle','upload_file','download_file','create_zip','document_info','search_files','create_workspace'}
 CONFIRM_ACTIONS={'delete_path'}
 
-def enqueue(action, params, agent='app', source='app', bypass_approval=False, target_device_id=None):
+def enqueue(action, params, agent='app', source='app', bypass_approval=False, target_device_id=None, trace_id=None):
     """V12.9: passa pela camada central de permissões antes de entrar na fila local."""
     params=params or {}
     if action not in ALLOWED_ACTIONS: raise HTTPException(status_code=400,detail='Ação não permitida')
@@ -157,7 +217,7 @@ def enqueue(action, params, agent='app', source='app', bypass_approval=False, ta
     target = str(target_device_id or clean.pop('_target_device_id', '') or '').strip()
     if target and not devices.get_device(target):
         raise HTTPException(status_code=404, detail='Dispositivo alvo não encontrado.')
-    COMMANDS.append({'id':cid,'action':action,'params':clean,'created_at':datetime.now(timezone.utc).isoformat(),'agent':agent,'target_device_id':target or None})
+    COMMANDS.append({'id':cid,'action':action,'params':clean,'created_at':datetime.now(timezone.utc).isoformat(),'agent':agent,'target_device_id':target or None,'trace_id':str(trace_id)[:40] if trace_id else None})
     security.audit('action_queued',command_id=cid,action=action,agent=agent,risk=security.risk_for(action),params=clean)
     orchestrator.record_event('action_queued', source=agent, status='queued', command_id=cid, action=action)
     return cid
@@ -166,7 +226,7 @@ def enqueue(action, params, agent='app', source='app', bypass_approval=False, ta
 async def add_command(request:Request, x_agent_token: str|None = Header(default=None)):
     if not auth(x_agent_token): raise HTTPException(status_code=401,detail='Agente não autorizado')
     body=await request.json(); action=body.get('action'); params=body.get('params') or {}
-    result=enqueue(action,params,agent=str(body.get('agent','app')),source=str(body.get('source','app')),target_device_id=body.get('target_device_id') or params.get('_target_device_id'))
+    result=enqueue(action,params,agent=str(body.get('agent','app')),source=str(body.get('source','app')),target_device_id=body.get('target_device_id') or params.get('_target_device_id'),trace_id=body.get('trace_id'))
     if isinstance(result,dict): return {'ok':True,**result,'action':action}
     return {'ok':True,'command_id':result,'queued':True,'action':action}
 
@@ -247,14 +307,17 @@ def wait_result(cid, timeout=15):
         time.sleep(0.5)
     return None
 
-def run_pc(action, params=None):
+def run_pc(action, params=None, target_device_id=None):
     """Mesmo formato do queue_pc_action do app: {'ok','result'|'error'}."""
     if not agent_online():
         return {'ok':False,'error':'O agente local está offline. Abra o start_agent.bat no PC.'}
     try:
-        cid=enqueue(action,params or {},agent='whatsapp',source='whatsapp')
+        cid=enqueue(action,params or {},agent='whatsapp',source='whatsapp',target_device_id=target_device_id)
     except HTTPException as e:
         return {'ok':False,'error':str(e.detail)}
+    if isinstance(cid,dict):  # aprovação de segurança pendente: não é timeout do agente
+        return {'ok':False,'pending_approval':True,'approval':cid.get('approval'),'action':action,
+                'error':'Ação aguardando aprovação de segurança no painel do Jarvis (aba Segurança).'}
     res=wait_result(cid)
     if res is None:
         return {'ok':False,'command_id':cid,'action':action,'error':'O agente local não respondeu a tempo. Verifique o start_agent.bat.'}

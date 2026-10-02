@@ -13,8 +13,8 @@ try:
 except Exception:
     requests = None; BeautifulSoup = None
 
-APP_VERSION=os.getenv('JARVIS_APP_VERSION','14.5.3')
-BUILD_TAG='command-reliability'
+APP_VERSION=os.getenv('JARVIS_APP_VERSION','19.0.0')
+BUILD_TAG='command-os-complete'
 MODEL=os.getenv('OPENROUTER_MODEL','openai/gpt-oss-120b')
 API_KEY=os.getenv('OPENROUTER_API_KEY')
 HONCHO_API_KEY=os.getenv('HONCHO_API_KEY')
@@ -28,6 +28,7 @@ MEMORY_FILE=Path('.jarvis_memory.json'); TASKS_FILE=Path('.jarvis_tasks.json')
 client=OpenAI(base_url='https://openrouter.ai/api/v1',api_key=API_KEY) if API_KEY else None
 
 import store, voice_io, hashlib, tempfile
+import v19_command_os as v19
 DEFAULTS={'messages':[],'tasks':[],'memory':{},'last_action':None,'session_id':uuid.uuid4().hex,'honcho_status':'não configurado','honcho_context':'','pending_pc':None,'mic_n':0,'last_audio_hash':''}
 for k,v in DEFAULTS.items():
     if k not in st.session_state: st.session_state[k]=v
@@ -262,7 +263,8 @@ def get_security_status():
     if not GATEWAY_URL or not LOCAL_AGENT_TOKEN: return {'ok':False,'error':'Gateway não configurado.'}
     try:
         r=requests.get(f'{GATEWAY_URL}/security/status',headers={'X-Agent-Token':LOCAL_AGENT_TOKEN},timeout=6); return r.json()
-    except Exception as e: return {'ok':False,'error':str(e)}
+    except Exception as e:
+        return {'ok':False,'error':f'{type(e).__name__}: {e}'}
 
 def get_security_approvals():
     try:
@@ -291,16 +293,21 @@ def queue_pc_action(action, params=None, wait_seconds=15, target_device_id=None)
     if not requests:
         return {'ok':False,'error':'requests não está disponível.'}
     headers={'X-Agent-Token':LOCAL_AGENT_TOKEN}
+    op=v19.start_operation(action, source='app', target=target_device_id or st.session_state.get('target_device_id'), payload=params or {})
     try:
-        payload={'action':action,'params':params or {},'agent':'app','source':'app','target_device_id':target_device_id or st.session_state.get('target_device_id') or None}
+        payload={'action':action,'params':params or {},'agent':'app','source':'app','trace_id':op['trace_id'],'target_device_id':target_device_id or st.session_state.get('target_device_id') or None}
         r=requests.post(f'{GATEWAY_URL}/agent/commands', json=payload, headers=headers, timeout=10)
         if r.status_code not in (200,201):
-            try: return {'ok':False,'error':r.json().get('detail',r.text)}
-            except Exception: return {'ok':False,'error':r.text}
+            try:
+                err=r.json().get('detail',r.text); v19.finish_operation(op['id'],False,error=err); return {'ok':False,'error':err}
+            except Exception:
+                v19.finish_operation(op['id'],False,error=r.text); return {'ok':False,'error':r.text}
         queued=r.json()
         if queued.get('pending_approval'):
+            v19.finish_operation(op['id'],False,error='pending_approval')
             return {'ok':False,'pending_approval':True,'approval':queued.get('approval'),'action':action,'message':'Ação enviada para aprovação de segurança.'}
-        if not queued.get('ok') or not queued.get('command_id'): return queued
+        if not queued.get('ok') or not queued.get('command_id'):
+            v19.finish_operation(op['id'],False,error=str(queued)[:800]); return queued
         command_id=queued['command_id']
         import time
         deadline=time.time()+max(3,int(wait_seconds))
@@ -310,11 +317,11 @@ def queue_pc_action(action, params=None, wait_seconds=15, target_device_id=None)
             for item in rr.json().get('results',[]):
                 if item.get('command_id')==command_id:
                     res=item.get('result') or {}
-                    return {'ok':bool(res.get('ok', item.get('ok'))),'command_id':command_id,'action':action,'result':res}
+                    ok=bool(res.get('ok', item.get('ok'))); v19.finish_operation(op['id'],ok,result=res,error=res.get('error')); return {'ok':ok,'command_id':command_id,'action':action,'result':res}
             time.sleep(poll_delay)
-        return {'ok':False,'command_id':command_id,'action':action,'error':'O agente local não respondeu no tempo esperado. Verifique se start_agent.bat está aberto.'}
+        err='O agente local não respondeu no tempo esperado. Verifique se start_agent.bat está aberto.'; v19.finish_operation(op['id'],False,error=err); return {'ok':False,'command_id':command_id,'action':action,'error':err}
     except Exception as e:
-        return {'ok':False,'error':str(e)}
+        v19.finish_operation(op['id'],False,error=f'{type(e).__name__}: {e}'); return {'ok':False,'error':str(e)}
 
 from pc_control import parse_pc_commands, PERMISSIONS, CONFIRM_ACTIONS, describe_step, is_confirm, is_cancel
 
@@ -584,7 +591,7 @@ def save_overnight_config(cfg):
     except Exception as e:
         return {'ok':False,'error':f'Não foi possível salvar a configuração: {type(e).__name__}: {e}'}
 
-tabs=st.tabs(['Command Center','Chat','Dashboard','Tarefas','Automações','Memória','Honcho','Skills','Sistema','WhatsApp','Agentes','Tools','Laboratório Noturno','Computer Agent','Segurança','Agent Map'])
+tabs=st.tabs(['Command Center','Chat','Dashboard','Tarefas','Automações','Memória','Honcho','Skills','Sistema','WhatsApp','Agentes','Tools','Laboratório Noturno','Computer Agent','Segurança','Agent Map','Command OS V19'])
 with tabs[1]:
     for m in st.session_state.messages:
         with st.chat_message(m['role']): st.markdown(m['content'])
@@ -1440,3 +1447,146 @@ with tabs[15]:
         st.write('V13.3 adiciona Live Operations ao Command Center, sem criar uma nova aba para preservar espaço visual.')
 
     st.info('V13.2 adiciona visualização operacional sem bypassar o Permission Manager.')
+
+# -----------------------------------------------------------------------------
+# V19.0 — Command OS Complete: consolida V15/V16/V17/V18/V19 em um único painel.
+with tabs[16]:
+    st.subheader('JARVIS Command OS — V19.0.0')
+    st.caption('Camada operacional consolidada: agentes, missões, workflows, recursos, rede de dispositivos, laboratório, operações e snapshots.')
+    st.code(f"VERSION  {v19.VERSION}\nBUILD    {v19.BUILD}", language='text')
+
+    s=v19.status()
+    c=st.columns(6)
+    c[0].metric('Agentes',s['agents'])
+    c[1].metric('Missões',s['missions'])
+    c[2].metric('Workflows',s['workflows'])
+    c[3].metric('Operações',s['operations']['total'])
+    c[4].metric('Sucesso',f"{s['operations']['success_rate']}%")
+    c[5].metric('Snapshots',s['snapshots'])
+
+    os1, os2, os3 = st.columns(3)
+    with os1:
+        st.markdown('### Agent Factory / Network')
+        if st.button('Recriar agentes padrão', key='v19_seed'):
+            v19.seed_agents(); st.success('Agentes padrão sincronizados.'); st.rerun()
+        agents_rows=v19.list_agents()
+        st.dataframe([{'Nome':a.get('name'),'Função':a.get('role'),'Temporário':'sim' if a.get('temporary') else 'não','Ativo':'sim' if a.get('enabled') else 'não'} for a in agents_rows],use_container_width=True,hide_index=True)
+        with st.expander('Criar agente temporário'):
+            an=st.text_input('Nome',key='v19_an'); ar=st.text_input('Função',value='specialist',key='v19_ar'); ad=st.text_area('Descrição',key='v19_ad'); aks=st.text_input('Skills (vírgula)',key='v19_aks')
+            if st.button('Criar agente',key='v19_create_agent'):
+                if not an.strip(): st.error('Informe um nome.')
+                else:
+                    v19.upsert_agent(an,ar,ad,[x.strip() for x in aks.split(',') if x.strip()],True,True); st.success('Agente criado.'); st.rerun()
+
+    with os2:
+        st.markdown('### Missions / Workflows')
+        goal=st.text_area('Objetivo da missão',key='v19_goal',height=90)
+        priority=st.selectbox('Prioridade',['low','normal','high','critical'],index=1,key='v19_priority')
+        if st.button('Criar missão',key='v19_create_mission'):
+            if goal.strip(): v19.create_mission(goal,priority); st.success('Missão criada na fila.'); st.rerun()
+        ms=v19.list_missions()
+        st.dataframe([{'ID':x.get('id'),'Objetivo':str(x.get('goal',''))[:70],'Prioridade':x.get('priority'),'Status':x.get('status'),'Trace':x.get('trace_id')} for x in reversed(ms[-15:])],use_container_width=True,hide_index=True)
+        queued=[x for x in ms if x.get('status') in ('queued','failed')]
+        if queued:
+            mid=st.selectbox('Missão para executar',[x['id'] for x in queued],format_func=lambda i: next(str(x['goal'])[:50] for x in queued if x['id']==i),key='v19_run_mid')
+            r1,r2=st.columns(2)
+            if r1.button('Executar selecionada',key='v19_run_mission'):
+                with st.spinner('A equipe está executando a missão...'): res=v19.run_mission(mid,run_team)
+                (st.success if res['ok'] else st.error)(f"Missão {res['status']}. Trace {res.get('trace_id')}"); st.write(res.get('reply') or res.get('error') or '')
+            if r2.button('Executar próxima da fila',key='v19_run_next'):
+                with st.spinner('Executando...'): res=v19.run_next_queued(run_team)
+                (st.success if res['ok'] else st.warning)(f"{res['status']}. {res.get('error') or ''}")
+        with st.expander('Criar workflow seguro'):
+            wn=st.text_input('Nome do workflow',key='v19_wn')
+            wa=st.text_input('Ações separadas por vírgula',value='system_info',key='v19_wa')
+            if st.button('Salvar workflow',key='v19_wf'):
+                acts=[x.strip() for x in wa.split(',') if x.strip()]
+                try:
+                    v19.create_workflow(wn or 'Workflow', [{'action':x,'params':{}} for x in acts]); st.success('Workflow salvo.'); st.rerun()
+                except Exception as e: st.error(str(e))
+        wfs=v19.list_workflows()
+        if wfs:
+            st.dataframe([{'ID':w.get('id'),'Nome':w.get('name'),'Etapas':len(w.get('steps',[])),'Última execução':str(w.get('last_run_at') or '—')[:19],'Status':w.get('last_status') or '—'} for w in wfs[-10:]],use_container_width=True,hide_index=True)
+            wid=st.selectbox('Workflow para executar',[w['id'] for w in wfs],format_func=lambda i: next(w['name'] for w in wfs if w['id']==i),key='v19_run_wid')
+            groups=v19.list_device_groups()
+            gid=st.selectbox('Executar em',['(dispositivo padrão)']+[g['id'] for g in groups],format_func=lambda i: i if i.startswith('(') else next(g['name'] for g in groups if g['id']==i),key='v19_run_gid')
+            conf=st.checkbox('Confirmo ações destrutivas deste workflow',key='v19_run_conf')
+            if st.button('Executar workflow',key='v19_run_wf'):
+                with st.spinner('Executando etapas...'): res=v19.run_workflow(wid,queue_pc_action,group_id=None if gid.startswith('(') else gid,confirmed=conf)
+                (st.success if res['ok'] else st.error)(f"Workflow {res['status']}. Trace {res.get('trace_id')}")
+                st.dataframe(res.get('steps',[]),use_container_width=True,hide_index=True)
+
+    with os3:
+        st.markdown('### Resources / Lab / Snapshots')
+        if st.button('Registrar snapshot do estado',key='v19_snap'):
+            x=v19.snapshot('manual-dashboard'); st.success(f"Snapshot {x['id']} criado.")
+        if st.button('Executar ciclo de análise do Lab',key='v19_lab_cycle'):
+            x=v19.lab_cycle(); st.success(f"Ciclo {x['id']} registrado; nenhuma mudança de produção foi aplicada."); st.dataframe(x['evaluations'],use_container_width=True,hide_index=True)
+        st.write('**Laboratório:**', 'ativo' if s['lab'].get('enabled') else 'pausado')
+        st.write('**Auto-apply:** sempre bloqueado nesta camada')
+        st.write('**Média das operações:**',f"{s['operations']['avg_duration_ms']} ms")
+        snaps=v19.snapshots()
+        if snaps:
+            st.dataframe(snaps[-8:],use_container_width=True,hide_index=True)
+            with st.expander('Restaurar snapshot'):
+                sid=st.selectbox('Snapshot',[x['id'] for x in reversed(snaps)],key='v19_rs_id')
+                scope=st.radio('Escopo',['v19','full'],format_func=lambda x:'Só Command OS (agentes, missões, workflows, grupos, lab)' if x=='v19' else 'Completo (+ tarefas, memória, dispositivos, timeline)',key='v19_rs_scope')
+                cf=st.checkbox('Entendo que isso sobrescreve o estado atual (um snapshot pre-restore será criado)',key='v19_rs_conf')
+                if st.button('Restaurar',key='v19_rs_go'):
+                    res=v19.restore_snapshot(sid,scope,confirm=cf)
+                    (st.success if res['ok'] else st.error)(res.get('error') or f"Restaurado: {', '.join(res['restored'])}. Backup: {res['pre_restore_snapshot']}")
+        with st.expander('Device Network — grupos'):
+            import devices as _dev
+            dv=_dev.list_devices(); gn=st.text_input('Nome do grupo',key='v19_gn')
+            gd=st.multiselect('Dispositivos',[d['id'] for d in dv],format_func=lambda i: next((d.get('name') or i) for d in dv if d['id']==i),key='v19_gd')
+            if st.button('Salvar grupo',key='v19_gs'):
+                try: v19.upsert_device_group(gn,gd); st.success('Grupo salvo.'); st.rerun()
+                except Exception as e: st.error(str(e))
+            if v19.list_device_groups(): st.dataframe([{'Grupo':g['name'],'Dispositivos':', '.join(g['device_ids'])} for g in v19.list_device_groups()],use_container_width=True,hide_index=True)
+
+    st.markdown('### Resource Monitor')
+    rc1,rc2=st.columns([1,3])
+    if rc1.button('Coletar recursos agora',key='v19_res_now'): v19.record_resources(); st.rerun()
+    rr=v19.resources(40)
+    if rr:
+        flat=[{'quando':str(x['timestamp'])[11:19],'carga_host':x['data'].get('host_load_1m'),'ram_host_%':x['data'].get('host_ram_used_pct'),'disco_livre_gb':x['data'].get('host_disk_free_gb'),'dispositivos_online':x['data'].get('devices_online'),'missoes_na_fila':x['data'].get('queued_missions')} for x in rr]
+        rc2.line_chart([{k:v_ for k,v_ in r.items() if k!='quando' and isinstance(v_,(int,float))} for r in flat])
+        st.dataframe(list(reversed(flat[-10:])),use_container_width=True,hide_index=True)
+        st.caption('Recursos do host da interface/gateway e telemetria dos dispositivos registrados. Snapshots automáticos a cada operação (no máximo 1 por minuto).')
+    else: st.info('Nenhuma coleta ainda. Clique em "Coletar recursos agora" ou execute qualquer operação.')
+
+    st.markdown('### Unified Diagnostics')
+    dg=v19.diagnostics({'interface':APP_VERSION})
+    (st.success if dg['ok'] else st.warning)('Todos os checks passaram.' if dg['ok'] else 'Há checks que precisam de atenção.')
+    st.dataframe([{'Check':c['check'],'OK':'✅' if c['ok'] else '⚠️','Detalhe':c['detail']} for c in dg['checks']],use_container_width=True,hide_index=True)
+
+    st.markdown('### Application Center')
+    ac=v19.application_center()
+    if ac['applications']: st.dataframe([{'Aplicativo':a['name'],'Dispositivos':a['count']} for a in ac['applications']],use_container_width=True,hide_index=True)
+    else: st.info('Nenhum aplicativo reportado pelos dispositivos ainda (o Local Agent envia a lista na telemetria).')
+
+    st.markdown('### Global Operations / Trace')
+    ops=v19.list_operations(80)
+    if ops:
+        st.dataframe([{'Trace':x.get('trace_id'),'Tipo':x.get('kind'),'Origem':x.get('source'),'Status':x.get('status'),'ms':x.get('duration_ms'),'Início':str(x.get('started_at',''))[:19]} for x in reversed(ops)],use_container_width=True,hide_index=True)
+    else:
+        st.info('Nenhuma operação V19 registrada ainda.')
+
+    tq=st.text_input('Buscar por Trace ID',key='v19_trace_q')
+    if tq.strip():
+        tr=v19.trace(tq.strip()); st.dataframe(tr,use_container_width=True,hide_index=True) if tr else st.info('Nenhuma operação com esse trace.')
+    st.markdown('### V15 → V19 — camadas consolidadas')
+    layers=[
+      ('V15','Agent Factory · agentes temporários · Agent Network · Workflows · Missions · Resource Manager'),
+      ('V16','Auto Planning · Auto Review · Auto Improvement · Lab 2.0 · Device Network · Application Center'),
+      ('V17','Command Center · HUD · Global Timeline · Live Operations · Notifications · Agent Map'),
+      ('V18','Orquestração integrada · estado global · diagnósticos · snapshots · contratos de componentes'),
+      ('V19','Command OS · trace IDs · operações · diagnóstico · consolidação e governança'),
+    ]
+    st.table([{'Versão':a,'Capacidades':b} for a,b in layers])
+    st.markdown('### Auto Planning / Review / Improvement')
+    if st.button('Gerar plano de análise para o objetivo atual',key='v19_plan'):
+        st.json(v19.plan_mission(st.session_state.get('v19_goal','') or 'Revisar o estado atual do Jarvis'))
+    props=v19.improvement_proposals()
+    st.dataframe(props or [{'area':'all','priority':'info','proposal':'Nenhuma melhoria pendente detectada.'}],use_container_width=True,hide_index=True)
+    st.warning('Segurança: o Command OS não bypassa o Permission Manager. Ações no PC continuam passando pelo Gateway, allowlist e Local Agent. O Laboratório propõe mudanças, mas não altera produção sozinho.')

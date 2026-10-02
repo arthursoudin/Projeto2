@@ -271,14 +271,29 @@ class TestGateway(InTmp):
         res, bg = self.post(payload(text_msg(mid='ok1'))); self.assertEqual(res['queued'], 1); res2, _ = self.post(payload(text_msg(mid='ok1'))); self.assertEqual(res2['queued'], 0)
 
     def test_text_message_runs_pc_command_and_replies(self):
-        self.agent_thread(); res, bg = self.post(payload(text_msg(body='crie a pasta Estudos'))); fn, a, k = bg.tasks[0]; fn(*a, **k)
+        # Com a aprovação de segurança dispensada (política do usuário), o fluxo executa direto.
+        with mock.patch.object(self.gw.security, 'needs_approval', return_value=False):
+            self.agent_thread(); res, bg = self.post(payload(text_msg(body='crie a pasta Estudos'))); fn, a, k = bg.tasks[0]; fn(*a, **k)
         self.assertEqual(len(self.sent), 1); to, body = self.sent[0]; self.assertEqual(to, '5511999998888'); self.assertIn('create_folder feito', body)
+
+    def test_medium_risk_action_reports_pending_approval_not_timeout(self):
+        # Política padrão: create_folder é risco médio -> precisa de aprovação. Não pode virar "agente não respondeu".
+        self.agent_thread(); res, bg = self.post(payload(text_msg(mid='ap1', body='crie a pasta Estudos'))); fn, a, k = bg.tasks[0]; fn(*a, **k)
+        self.assertIn('aprovação', self.sent[0][1]); self.assertNotIn('não respondeu', self.sent[0][1]); self.assertEqual(self.gw.RESULTS, [])
 
     def test_offline_agent_is_reported_not_faked(self):
         _, bg = self.post(payload(text_msg(body='abra o vs code'))); fn, a, k = bg.tasks[0]; fn(*a, **k)
         self.assertIn('offline', self.sent[0][1]); self.assertIn('❌', self.sent[0][1])
 
+    def test_delete_via_whatsapp_blocked_by_default_policy(self):
+        self.agent_thread()
+        for i, body in enumerate(['apague a pasta Velha', 'sim']):
+            _, bg = self.post(payload(text_msg(mid=f'wb{i}', body=body))); fn, a, k = bg.tasks[0]; fn(*a, **k)
+        self.assertEqual(self.gw.RESULTS, []); self.assertIn('bloqueada', self.sent[-1][1])
+
     def test_delete_via_whatsapp_needs_yes(self):
+        # Se o usuário liberar delete_path na política, a confirmação "sim" continua obrigatória.
+        self.p2 = mock.patch.multiple(self.gw.security, blocked=lambda a: False, needs_approval=lambda a: False); self.p2.start(); self.addCleanup(self.p2.stop)
         self.agent_thread()
         for i, body in enumerate(['apague a pasta Velha', 'sim']):
             _, bg = self.post(payload(text_msg(mid=f'w{i}', body=body))); fn, a, k = bg.tasks[0]; fn(*a, **k)
@@ -309,7 +324,10 @@ class TestGateway(InTmp):
         enq = self.gw.enqueue
         for action, params in (('rm_rf', {}), ('delete_path', {'name': 'x'}), ('schedule_add', {'steps': [{'action': 'delete_path'}]})):
             with self.assertRaises(self.fa.HTTPException): enq(action, params)
-        self.assertTrue(enq('delete_path', {'name': 'x', 'confirmed': True}))
+        with self.assertRaises(self.fa.HTTPException) as c: enq('delete_path', {'name': 'x', 'confirmed': True})  # política padrão bloqueia
+        self.assertEqual(c.exception.status_code, 403)
+        with mock.patch.multiple(self.gw.security, blocked=lambda a: False, needs_approval=lambda a: False):
+            self.assertTrue(enq('delete_path', {'name': 'x', 'confirmed': True}))
 
 
 if __name__ == '__main__':

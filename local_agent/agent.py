@@ -25,7 +25,7 @@ from urllib.parse import quote_plus, urlparse
 
 import requests
 
-VERSION = "14.5.3"
+VERSION = "19.0.0"
 BASE_DIR = pathlib.Path(__file__).resolve().parent
 CONFIG_FILE = BASE_DIR / "config.json"
 
@@ -1065,8 +1065,12 @@ def main():
                 if not cid:
                     continue
                 result = execute_action(action, cmd.get("params"))
+                trace_id = cmd.get("trace_id")
+                if trace_id and isinstance(result, dict):
+                    result["trace_id"] = trace_id  # V19: devolve o trace ID ao Gateway/Command OS
                 status = "OK  " if result.get("ok") else "ERRO"
-                print(f"[{status}] {action}: {result.get('message') or result.get('error') or ''}"[:200])
+                tr = f" (trace {str(trace_id)[:8]})" if trace_id else ""
+                print(f"[{status}] {action}{tr}: {result.get('message') or result.get('error') or ''}"[:200])
                 try:
                     send_result(cid, action, result)
                 except Exception as e:

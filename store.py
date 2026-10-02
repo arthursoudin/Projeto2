@@ -49,6 +49,10 @@ def _endpoint():
 
 
 def _file(key):
+    base = os.getenv('JARVIS_STORE_DIR', '').strip()
+    if base:
+        Path(base).mkdir(parents=True, exist_ok=True)
+        return Path(base) / f'.jarvis_{key}.json'
     return Path(f'.jarvis_{key}.json')
 
 

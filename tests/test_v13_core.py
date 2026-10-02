@@ -4,10 +4,14 @@ import orchestrator
 import devices
 
 class V13CoreTests(unittest.TestCase):
+    def setUp(self):
+        os.environ["JARVIS_STORE_DIR"] = tempfile.mkdtemp()  # store isolado: nada de estado de outros testes
+
     def test_capabilities(self):
         c = orchestrator.capabilities()
-        self.assertEqual(c["version"], "13.3.1")
-        self.assertIn("multi_pc", c["future_ready"])
+        self.assertEqual(c["version"], orchestrator.VERSION)
+        self.assertIn("timeline", c["foundation"])
+        self.assertIsInstance(c["future_ready"], list)
 
     def test_mission_lifecycle(self):
         m = orchestrator.create_mission("Teste V13", source="test")

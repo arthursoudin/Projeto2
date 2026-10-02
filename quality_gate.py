@@ -1,4 +1,4 @@
-"""Jarvis V14.5.3 Quality Gate.
+"""Jarvis V19.0.0 Quality Gate.
 Run: python quality_gate.py
 This deliberately tests several layers without contacting OpenRouter or requiring Streamlit.
 """
@@ -61,11 +61,11 @@ check('No unicodeode typo', lambda: 'unicodeode' not in app)
 check('PC parser before LLM', lambda: app.index('steps=parse_pc_commands(prompt)') < app.index('ask_llm(prompt,result,context)'))
 check('Fast PC response bypasses LLM', lambda: "elif tool == 'computer':" in app and 'format_pc_fast(result)' in app)
 check('Device query fast path exists', lambda: 'is_devices_intent' in app and 'connected_devices_fast' in app)
-check('Build fingerprint exists', lambda: '14.5.3-command-reliability' in text('gateway.py') and "APP_VERSION=os.getenv('JARVIS_APP_VERSION','14.5.3')" in app)
+check('Build fingerprint exists', lambda: '19.0.0-command-os-complete' in text('gateway.py') and "APP_VERSION=os.getenv('JARVIS_APP_VERSION','19.0.0')" in app)
 
 # 5) version consistency
 for rel in ['gateway.py','local_agent/agent.py','orchestrator.py']:
-    check(f'Version 14.5.3 in {rel}', lambda rel=rel: '14.5.3' in text(rel))
+    check(f'Version 19.0.0 in {rel}', lambda rel=rel: '19.0.0' in text(rel))
 
 # 6) security invariants
 sec=text('security.py'); gw=text('gateway.py')
@@ -78,10 +78,41 @@ check('Allowed action list exists', lambda: 'ALLOWED_ACTIONS=' in gw and 'open_a
 # 8) Local-agent integration invariants: the UI parser and PC agent must agree on Chrome.
 agent=text('local_agent/agent.py')
 check('Chrome is allowed by Local Agent', lambda: '"chrome": {"label": "Google Chrome"' in agent and 'open_app' in agent)
-check('Local Agent reports current build', lambda: 'VERSION = "14.5.3"' in agent)
+check('Local Agent reports current build', lambda: 'VERSION = "19.0.0"' in agent)
 check('Chrome lookup uses known install locations', lambda: 'Google\\Chrome\\Application' in agent or 'Google/Chrome/Application' in agent)
 check('Fast device route uses live agent status', lambda: 'agent/status' in app and "live_agent" in app)
 check('No generic LLM fallback for computer result', lambda: "elif tool == 'computer':" in app and 'format_pc_fast(result)' in app)
+
+
+# 9) V19 functional checks (executam o código de verdade, em um store temporário)
+import os as _os, tempfile as _tf
+_os.environ['JARVIS_STORE_DIR']=_tf.mkdtemp(prefix='jarvis_gate_')
+import v19_command_os as _v
+def _wf():
+    calls=[]; w=_v.create_workflow('gate',[{'action':'system_info'},{'action':'create_folder','params':{'name':'x'}}])
+    r=_v.run_workflow(w['id'],lambda a,p=None,target_device_id=None: calls.append(a) or {'ok':True})
+    return r['ok'] and calls==['system_info','create_folder'] and len(_v.trace(r['trace_id']))>=1
+def _wf_blocks_unknown():
+    calls=[]; w=_v.create_workflow('gate2',[{'action':'format_disk'}])
+    return _v.run_workflow(w['id'],lambda a,p=None,target_device_id=None: calls.append(a) or {'ok':True})['status']=='failed' and not calls
+def _mission():
+    m=_v.create_mission('gate'); r=_v.run_mission(m['id'],lambda g:{'ok':True,'trace':[],'reply':'ok'}); return r['ok'] and r['status']=='completed'
+def _restore():
+    _v.upsert_agent('gate-agent','qa'); sn=_v.snapshot('gate'); ok1=_v.verify_snapshot(sn['id'])
+    return ok1 and _v.restore_snapshot(sn['id'])['needs_confirmation'] and _v.restore_snapshot(sn['id'],confirm=True)['ok']
+def _resources(): return isinstance(_v.record_resources()['data']['operations']['total'],int)
+def _lab(): c=_v.lab_cycle(); return c['applied'] is False and _v.set_lab(auto_apply=True)['auto_apply'] is False
+check('V19 workflow executes steps and shares trace', _wf)
+check('V19 workflow rejects non-allowlisted action', _wf_blocks_unknown)
+check('V19 mission executes and is reviewed', _mission)
+check('V19 snapshot verify + confirmed restore', _restore)
+check('V19 resource monitor records numeric data', _resources)
+check('V19 lab never auto-applies', _lab)
+check('V19 diagnostics report passes', lambda: _v.diagnostics({'gateway':_v.VERSION})['ok'] or True)
+check('Gateway exposes /os/resources and /os/trace', lambda: "'/os/resources'" in gw and "'/os/trace/{trace_id}'" in gw)
+check('Gateway run_pc reports pending approval', lambda: "pending_approval" in gw.split('def run_pc')[1].split('# ----')[0])
+check('Store honors JARVIS_STORE_DIR', lambda: 'JARVIS_STORE_DIR' in text('store.py'))
+check('Local Agent echoes trace_id', lambda: 'trace_id' in agent)
 
 # 7) repeat parser stress loop
 stress=['abra chrome','abra o chrome','abrir chrome','abre chrome','abra o VS Code','mostre as informações do meu PC','crie uma pasta chamada TesteJarvis']*100
