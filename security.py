@@ -20,7 +20,7 @@ RISK = {
     'system_info':'low','read_log':'low','list_files':'low','read_file':'low','schedule_list':'low',
     'create_folder':'medium','create_file':'medium','append_file':'medium','move_path':'medium',
     'copy_path':'medium','rename_path':'medium','schedule_add':'medium','schedule_toggle':'medium',
-    'schedule_remove':'medium','delete_path':'high',
+    'schedule_remove':'medium','upload_file':'medium','download_file':'low','create_zip':'medium','document_info':'low','search_files':'low','create_workspace':'medium','delete_path':'high',
 }
 
 def policy():

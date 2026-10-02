@@ -286,4 +286,22 @@ estado global do sistema:
 - V13.2 — Agent Map
 - V13.3 — Live Operations
 - V13.4 — Notification Center
-- V13.5 — Multi-PC
+- V14.0 — Multi-PC
+
+## V14.0 — Multi-PC
+- O catálogo de dispositivos mantém `device_id`, nome, versão, capacidades e telemetria básica.
+- Cada Local Agent envia `X-Device-ID` no heartbeat/poll.
+- O Gateway aceita `target_device_id` em comandos e só entrega comandos direcionados ao dispositivo correspondente.
+- O HUD ganhou seleção de dispositivo alvo no popover `DEVICES` e no Computer Agent.
+- `AUTO` mantém o comportamento legado de aceitar qualquer Local Agent disponível.
+- O controle continua sujeito ao Permission Manager, Kill Switch, aprovações e limites.
+- Nenhum shell remoto foi adicionado.
+
+
+## V14.0 — Device & App Control
+- Device Manager com inventário de aplicativos.
+- Local Agent reporta aplicativos permitidos e disponibilidade.
+- `open_app` ampliado para Chrome, Edge, VS Code, DBeaver, IntelliJ, pgAdmin, Obsidian e apps Windows já suportados.
+- `list_apps` consulta o catálogo sem executar aplicativos.
+- Gateway: `/devices/apps` e `/devices/{device_id}/apps`.
+- Nenhum shell arbitrário ou execução fora da allowlist foi adicionada.

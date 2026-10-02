@@ -5,7 +5,7 @@ from fastapi.responses import PlainTextResponse
 
 import whatsapp, core, voice_io, store, security, orchestrator, devices, live_operations
 
-VERSION='13.3.0'
+VERSION='14.5.0'
 app=FastAPI(title='Jarvis Gateway',version=VERSION)
 LOCAL_AGENT_TOKEN=os.getenv('LOCAL_AGENT_TOKEN','')
 COMMANDS=[]
@@ -19,7 +19,7 @@ def overnight_config():
     if not isinstance(cfg,dict): cfg=OVERNIGHT_DEFAULT.copy()
     out=OVERNIGHT_DEFAULT.copy(); out.update(cfg); return out
 
-INFO_KEYS={'version','computer','cpu_percent','ram_total_gb','ram_livre_gb','ram_em_uso_percent','disco_total_gb','disco_livre_gb','ligado_ha','rotinas_ativas','proxima_rotina','jarvis_folder'}
+INFO_KEYS={'version','computer','cpu_percent','ram_total_gb','ram_livre_gb','ram_em_uso_percent','disco_total_gb','disco_livre_gb','ligado_ha','rotinas_ativas','proxima_rotina','jarvis_folder','applications','application_count'}
 
 def auth(token):
     return bool(LOCAL_AGENT_TOKEN) and secrets.compare_digest(token or '', LOCAL_AGENT_TOKEN)
@@ -74,7 +74,22 @@ def get_missions(x_agent_token: str|None = Header(default=None)):
 @app.get('/devices')
 def get_devices(x_agent_token: str|None = Header(default=None)):
     if not auth(x_agent_token): raise HTTPException(status_code=401, detail='Não autorizado')
-    return {'ok': True, 'devices': devices.list_devices(), 'summary': devices.summary()}
+    rows=devices.refresh_status()
+    return {'ok': True, 'devices': rows, 'summary': devices.summary()}
+
+
+@app.get('/devices/apps')
+def devices_apps(x_agent_token: str|None = Header(default=None)):
+    if not auth(x_agent_token): raise HTTPException(status_code=401,detail='Agente não autorizado')
+    rows=devices.list_devices()
+    return {'ok':True,'devices':[{'id':d.get('id'),'name':d.get('name'),'status':d.get('status'),'applications':d.get('applications',[]),'application_count':d.get('application_count',0)} for d in rows]}
+
+@app.get('/devices/{device_id}/apps')
+def device_apps(device_id: str, x_agent_token: str|None = Header(default=None)):
+    if not auth(x_agent_token): raise HTTPException(status_code=401,detail='Agente não autorizado')
+    d=devices.get_device(device_id)
+    if not d: raise HTTPException(status_code=404,detail='Dispositivo não encontrado')
+    return {'ok':True,'device_id':device_id,'name':d.get('name'),'status':d.get('status'),'applications':d.get('applications',[])}
 
 @app.get('/uptime')
 def uptime():
@@ -108,10 +123,10 @@ def list_tasks(x_agent_token: str|None = Header(default=None)):
     return {'ok':True,'tasks':tasks()}
 
 # ------------------------------------------------------------------ fila de comandos do PC
-ALLOWED_ACTIONS={'open_app','open_folder','open_file','open_url','search_web','create_folder','create_file','append_file','read_file','list_files','move_path','copy_path','rename_path','delete_path','system_info','read_log','schedule_add','schedule_list','schedule_remove','schedule_toggle'}
+ALLOWED_ACTIONS={'open_app','list_apps','open_folder','open_file','open_url','search_web','create_folder','create_file','append_file','read_file','list_files','move_path','copy_path','rename_path','delete_path','system_info','read_log','schedule_add','schedule_list','schedule_remove','schedule_toggle','upload_file','download_file','create_zip','document_info','search_files','create_workspace'}
 CONFIRM_ACTIONS={'delete_path'}
 
-def enqueue(action, params, agent='app', source='app', bypass_approval=False):
+def enqueue(action, params, agent='app', source='app', bypass_approval=False, target_device_id=None):
     """V12.9: passa pela camada central de permissões antes de entrar na fila local."""
     params=params or {}
     if action not in ALLOWED_ACTIONS: raise HTTPException(status_code=400,detail='Ação não permitida')
@@ -138,7 +153,10 @@ def enqueue(action, params, agent='app', source='app', bypass_approval=False):
     if len(COMMANDS)>=50: raise HTTPException(status_code=429,detail='Fila cheia')
     cid=secrets.token_urlsafe(12)
     clean=dict(params); clean.pop('_security_approved',None); clean.pop('_security_cycle_id',None)
-    COMMANDS.append({'id':cid,'action':action,'params':clean,'created_at':datetime.now(timezone.utc).isoformat(),'agent':agent})
+    target = str(target_device_id or clean.pop('_target_device_id', '') or '').strip()
+    if target and not devices.get_device(target):
+        raise HTTPException(status_code=404, detail='Dispositivo alvo não encontrado.')
+    COMMANDS.append({'id':cid,'action':action,'params':clean,'created_at':datetime.now(timezone.utc).isoformat(),'agent':agent,'target_device_id':target or None})
     security.audit('action_queued',command_id=cid,action=action,agent=agent,risk=security.risk_for(action),params=clean)
     orchestrator.record_event('action_queued', source=agent, status='queued', command_id=cid, action=action)
     return cid
@@ -147,16 +165,25 @@ def enqueue(action, params, agent='app', source='app', bypass_approval=False):
 async def add_command(request:Request, x_agent_token: str|None = Header(default=None)):
     if not auth(x_agent_token): raise HTTPException(status_code=401,detail='Agente não autorizado')
     body=await request.json(); action=body.get('action'); params=body.get('params') or {}
-    result=enqueue(action,params,agent=str(body.get('agent','app')),source=str(body.get('source','app')))
+    result=enqueue(action,params,agent=str(body.get('agent','app')),source=str(body.get('source','app')),target_device_id=body.get('target_device_id') or params.get('_target_device_id'))
     if isinstance(result,dict): return {'ok':True,**result,'action':action}
     return {'ok':True,'command_id':result,'queued':True,'action':action}
 
 @app.get('/agent/poll')
-def poll_commands(x_agent_token: str|None = Header(default=None)):
+def poll_commands(x_agent_token: str|None = Header(default=None), x_device_id: str|None = Header(default=None)):
     if not auth(x_agent_token): raise HTTPException(status_code=401,detail='Agente não autorizado')
     AGENT['last_seen']=time.time()
-    batch=COMMANDS[:5]; del COMMANDS[:len(batch)]
-    return {'ok':True,'commands':batch}
+    device_id=str(x_device_id or '').strip()
+    if device_id:
+        device=devices.get_device(device_id)
+        if device: device['status']='online'; device['last_seen']=datetime.now(timezone.utc).isoformat(); store.save('devices',devices.list_devices())
+    selected=[]; keep=[]
+    for cmd in COMMANDS:
+        target=cmd.get('target_device_id')
+        if len(selected)<5 and (not target or target==device_id): selected.append(cmd)
+        else: keep.append(cmd)
+    COMMANDS[:] = keep
+    return {'ok':True,'commands':selected,'device_id':device_id}
 
 @app.post('/agent/results')
 async def agent_result(request:Request, x_agent_token: str|None = Header(default=None)):
@@ -188,6 +215,7 @@ async def heartbeat(request:Request, x_agent_token: str|None = Header(default=No
                 name=body.get('computer'),
                 capabilities=body.get('capabilities') if isinstance(body.get('capabilities'), list) else [],
                 version=body.get('version'),
+                telemetry=info,
             )
         except Exception:
             pass

@@ -1,4 +1,4 @@
-import os, json, asyncio, datetime as dt, uuid, re
+import os, json, asyncio, datetime as dt, uuid, re, base64
 from pathlib import Path
 import streamlit as st
 from openai import OpenAI
@@ -52,6 +52,9 @@ def refresh_state():
 if 'pc_history' not in st.session_state: st.session_state.pc_history=[]
 refresh_state()
 if 'pc_profile' not in st.session_state: st.session_state.pc_profile=store.load('pc_profile',{})
+if 'target_device_id' not in st.session_state: st.session_state.target_device_id=''
+if 'device_apps' not in st.session_state: st.session_state.device_apps={}
+
 
 @st.cache_resource(show_spinner=False)
 def get_honcho():
@@ -107,7 +110,7 @@ from core import now, current_time, iso_now, calculator, parse_due, recurrence_f
 import core
 from agents import wants_team, strip_trigger, AGENTS
 from tool_registry import tool_rows, tools_for_agent
-import orchestrator, devices, live_operations
+import orchestrator, devices, live_operations, notifications
 
 def next_task_id():
     return max([int(t.get('id',0)) for t in st.session_state.tasks] or [0])+1
@@ -271,7 +274,7 @@ def security_policy_save(data):
         r=requests.post(f'{GATEWAY_URL}/security/policy',json=data,headers={'X-Agent-Token':LOCAL_AGENT_TOKEN},timeout=8); return r.json()
     except Exception as e: return {'ok':False,'error':str(e)}
 
-def queue_pc_action(action, params=None, wait_seconds=15):
+def queue_pc_action(action, params=None, wait_seconds=15, target_device_id=None):
     """Envia a ação ao agente local e aguarda o resultado real."""
     if not GATEWAY_URL or not LOCAL_AGENT_TOKEN:
         return {'ok':False,'error':'Configure JARVIS_GATEWAY_URL e LOCAL_AGENT_TOKEN no Render.'}
@@ -279,7 +282,8 @@ def queue_pc_action(action, params=None, wait_seconds=15):
         return {'ok':False,'error':'requests não está disponível.'}
     headers={'X-Agent-Token':LOCAL_AGENT_TOKEN}
     try:
-        r=requests.post(f'{GATEWAY_URL}/agent/commands', json={'action':action,'params':params or {},'agent':'app','source':'app'}, headers=headers, timeout=10)
+        payload={'action':action,'params':params or {},'agent':'app','source':'app','target_device_id':target_device_id or st.session_state.get('target_device_id') or None}
+        r=requests.post(f'{GATEWAY_URL}/agent/commands', json=payload, headers=headers, timeout=10)
         if r.status_code not in (200,201):
             try: return {'ok':False,'error':r.json().get('detail',r.text)}
             except Exception: return {'ok':False,'error':r.text}
@@ -349,6 +353,32 @@ def run_team(goal):
     """V12.7: o Planejador divide o objetivo e os agentes especialistas executam. Equipes nunca apagam nada."""
     brain=core.Brain(run_pc=queue_pc_action,llm=core.make_llm(),agent_status=get_agent_status,channel='app')
     out=brain.team_run(goal); refresh_state(); st.session_state.last_team=out; return out
+
+def is_pc_intent(text):
+    """Detecta pedidos de controle local antes do LLM para evitar respostas genéricas de 'não tenho acesso'."""
+    n=unidecode(str(text or '')).lower() if unidecode else str(text or '').lower()
+    keys=(
+        'no meu pc','no computador','no meu computador','no notebook','na minha maquina',
+        'abrir chrome','abra chrome','abre chrome','abrir navegador','abra o navegador','abre o navegador',
+        'abrir uma pagina','abra uma pagina','abre uma pagina','abrir página','abra página','abre página',
+        'abrir site','abra o site','abre o site','acesse o site','acessar o site',
+        'crie uma pasta','criar uma pasta','criar arquivo','crie um arquivo','abra a pasta','abrir a pasta',
+        'mostre as informacoes do meu pc','informacoes do meu pc','informações do meu pc',
+        'informacoes do computador','informações do computador','status do pc','status do computador',
+        'meu computador','meu pc','controle o pc','controle do pc'
+    )
+    return any(k in n for k in keys)
+
+def pc_clarification(text):
+    """Responde a intenções locais incompletas sem deixar o LLM inventar limitações."""
+    n=unidecode(str(text or '')).lower() if unidecode else str(text or '').lower()
+    browser_words=('chrome','navegador','pagina','página','site')
+    if any(w in n for w in browser_words) and not re.search(r'https?://|\bwww\.|\b[a-z0-9-]+\.(?:com|br|org|net|io|dev|app|ai)\b', n):
+        return 'Qual página ou site você quer que eu abra? Pode me passar o endereço, por exemplo: "abra https://example.com no Chrome".'
+    if any(x in n for x in ('abrir uma pagina','abra uma pagina','abre uma pagina','abrir página','abra página','abre página')):
+        return 'Qual página você quer abrir? Me passe o site ou endereço e eu tento abrir no seu PC pelo agente local.'
+    return None
+
 
 st.set_page_config(page_title='JARVIS // COMMAND OS',page_icon='J',layout='wide',initial_sidebar_state='collapsed')
 
@@ -447,7 +477,7 @@ button[kind="secondary"]{border-color:rgba(255,59,48,.18)!important}button[kind=
 @media(max-width:1000px){.refined-center{min-height:430px}.refined-orb{width:300px;height:300px}}
 </style>
 
-<div class="jarvis-topbar" style="display:none"><div class="jarvis-brand"><span>J</span>ARVIS // COMMAND OS</div><div class="jarvis-nav"><b>CORE</b><span>AGENTS</span><span>DEVICES</span><span>MISSIONS</span><span>MEMORY</span><span>SECURITY</span></div><div class="jarvis-clock">SYSTEM ONLINE • V13.3.1</div></div>
+<div class="jarvis-topbar" style="display:none"><div class="jarvis-brand"><span>J</span>ARVIS // COMMAND OS</div><div class="jarvis-nav"><b>CORE</b><span>AGENTS</span><span>DEVICES</span><span>MISSIONS</span><span>MEMORY</span><span>SECURITY</span></div><div class="jarvis-clock">SYSTEM ONLINE • V14.5.0</div></div>
 ''', unsafe_allow_html=True)
 st.title('JARVIS // COMMAND OS'); st.caption('Central de comando • Agentes • Dispositivos • Missões • Memória • Segurança • Automação')
 with st.sidebar:
@@ -525,6 +555,16 @@ with tabs[1]:
                     todo=', '.join(describe_step(a,p) for a,p in st.session_state.pending_pc if a in CONFIRM_ACTIONS)
                     result+=f' | AGUARDANDO CONFIRMAÇÃO do usuário para: {todo}. Nada disso foi executado ainda.'
                     confirm_note=f'\n\n⚠️ **Confirma?** {todo} — responda **sim** ou **não**. (Itens apagados vão para a lixeira do Jarvis e podem ser restaurados.)'
+            elif is_pc_intent(prompt):
+                clarification=pc_clarification(prompt)
+                if clarification:
+                    tool='computer'; result=clarification
+                else:
+                    status=get_agent_status()
+                    if not status.get('online'):
+                        tool='computer'; result='O pedido é de controle do seu PC, mas o Local Agent está offline. Abra `local_agent/start_agent.bat` no computador e tente novamente.'
+                    else:
+                        tool='computer'; result='Entendi que você quer uma ação no seu PC, mas ainda preciso do aplicativo, arquivo, pasta ou página específica. Diga exatamente o que devo abrir ou fazer.'
             else: tool,result=execute_tool(prompt)
         context=honcho_context(prompt); st.session_state.honcho_context=context
         st.session_state.last_action={'skills':skills,'tool':tool,'result':result,'session_id':st.session_state.session_id}
@@ -852,6 +892,13 @@ with tabs[13]:
         c2.metric('Ações permitidas',len(_ca.SAFE_ACTIONS))
         c3.metric('Ações bloqueadas',len(_ca.BLOCKED_ACTIONS))
 
+        device_options=['AUTO']+[f"{d.get('name') or d.get('id','device')} ({d.get('status','offline')})" for d in devices.refresh_status()]
+        device_ids=['']+[str(d.get('id','')) for d in devices.list_devices()]
+        cur=st.session_state.get('target_device_id','')
+        try: cur_idx=device_ids.index(cur)
+        except ValueError: cur_idx=0
+        selected_device=st.selectbox('Computador alvo',device_options,index=cur_idx,key='computer_target_device')
+        st.session_state.target_device_id=device_ids[device_options.index(selected_device)]
         instruction=st.text_area('O que o Computer Agent deve fazer?', placeholder='Ex.: crie a pasta ProjetoTeste e depois crie o arquivo README.txt dentro dela', height=100, key='computer_instruction')
         instruction_text = instruction if isinstance(instruction, str) else ''
         if instruction_text.strip():
@@ -962,13 +1009,13 @@ with tabs[14]:
         st.info('Regra V12.9: baixo risco pode executar automaticamente; médio/alto risco entra na fila de aprovação; ações bloqueadas continuam bloqueadas. O Laboratório Noturno pode analisar segurança, mas não recebe permissão para aplicar mudanças sozinho.')
 
 
-# V13.3.4 — Refined HUD + Chat
+# V14.5 — File & Document Center (base: V14.0.0 Device & App Control)
 with tabs[0]:
     try: _agent = get_agent_status()
     except Exception: _agent = {'ok':False,'online':False,'info':{}}
     try: _sec = get_security_status()
     except Exception: _sec = {}
-    try: _devices = devices.list_devices()
+    try: _devices = devices.refresh_status()
     except Exception: _devices = []
     try: _missions = orchestrator.list_missions()
     except Exception: _missions = []
@@ -976,12 +1023,13 @@ with tabs[0]:
     except Exception: _events = []
     try: _live = live_operations.snapshot(limit=8)
     except Exception: _live = {'current':None,'running':[],'recent':[],'event_count':len(_events)}
+    _notifications = notifications.build_notifications(agent=_agent, security=_sec, missions=_missions, tasks=st.session_state.tasks, events=_events, live=_live)
     _running=[m for m in _missions if m.get('status')=='running']; _done=[m for m in _missions if m.get('status') in ('done','completed','success')]; _failed=[m for m in _missions if m.get('status')=='failed']
     _online_devices=[d for d in _devices if d.get('status')=='online']; _info=_agent.get('info') or {}; _online=bool(_agent.get('online')); _pending=int(_sec.get('pending',0) or 0); _kill=bool(_sec.get('kill_switch'))
     _current=_live.get('current') or {}; _cur_status=str(_current.get('status','idle')).upper(); _cur_agent=str(_current.get('agent') or 'SYSTEM')[:24]; _cur_action=str(_current.get('instruction') or _current.get('result') or 'Aguardando uma missão...')[:100]; _dur=_current.get('duration_ms'); _dur_text=f'{float(_dur)/1000:.1f}s' if isinstance(_dur,(int,float)) else '--'
 
-    st.markdown('<div class="refined-top"><div class="refined-brand"><i>J</i>ARVIS // COMMAND OS</div><div class="refined-sub">CORE • AGENT LOOP • TOOLS • LIVE OPERATIONS</div><div class="refined-system"><b>●</b> SYSTEM ONLINE • V13.3.4</div></div>',unsafe_allow_html=True)
-    st.markdown('<div class="refined-dock">',unsafe_allow_html=True); d=st.columns([1,1,1,1,1,1,1,1.15])
+    st.markdown('<div class="refined-top"><div class="refined-brand"><i>J</i>ARVIS // COMMAND OS</div><div class="refined-sub">CORE • AGENT LOOP • TOOLS • LIVE OPERATIONS</div><div class="refined-system"><b>●</b> SYSTEM ONLINE • V14.5</div></div>',unsafe_allow_html=True)
+    st.markdown('<div class="refined-dock">',unsafe_allow_html=True); d=st.columns([1,1,1,1,1,1,1,1,1,1.15])
     with d[0]:
         with st.popover('SYSTEM'):
             st.markdown('**SYSTEM**'); st.write('Core: **ONLINE**'); st.write(f"Local Agent: **{'ONLINE' if _online else 'OFFLINE'}**"); st.write(f"CPU: **{_info.get('cpu_percent','—')}%**"); st.write(f"RAM: **{_info.get('ram_em_uso_percent','—')}%**")
@@ -999,24 +1047,120 @@ with tabs[0]:
             st.markdown('**MEMORY**'); st.write(f"Local: **{len(st.session_state.memory)}**"); st.write(f"Honcho: **{st.session_state.honcho_status}**"); st.write(f"Skills: **{len(SKILLS)}**")
     with d[5]:
         with st.popover('DEVICES'):
-            st.markdown('**DEVICES**'); [st.caption(f"● {dv.get('name') or dv.get('device_id','device')} — {dv.get('status','unknown')}") for dv in _devices[:10]]
-            if not _devices: st.caption('Nenhum dispositivo registrado.')
+            st.markdown('**DEVICE MANAGER • MULTI-PC**')
+            if _devices:
+                opts=['AUTO (qualquer agente)']+[f"{dv.get('name') or dv.get('id','device')} • {dv.get('status','unknown')}" for dv in _devices[:20]]
+                ids=['']+[str(dv.get('id','')) for dv in _devices[:20]]
+                current_id=st.session_state.get('target_device_id','')
+                try: idx=ids.index(current_id)
+                except ValueError: idx=0
+                choice=st.selectbox('Dispositivo alvo',opts,index=idx,key='device_target_select')
+                st.session_state.target_device_id=ids[opts.index(choice)]
+                for dv in _devices[:10]:
+                    st.caption(f"● {dv.get('name') or dv.get('id','device')} — {dv.get('status','unknown')} • CPU {dv.get('cpu_percent','—')}% • RAM {dv.get('ram_em_uso_percent','—')}%")
+                st.caption('Alvo atual: '+(st.session_state.target_device_id or 'AUTO'))
+                if st.button('Ver aplicativos do alvo', key='device_apps_btn'):
+                    if st.session_state.target_device_id:
+                        try:
+                            r=requests.get(f'{GATEWAY_URL}/devices/{st.session_state.target_device_id}/apps', headers={'X-Agent-Token':LOCAL_AGENT_TOKEN}, timeout=6); r.raise_for_status(); st.session_state.device_apps=r.json()
+                        except Exception as e: st.session_state.device_apps={'ok':False,'error':str(e)}
+                    else: st.session_state.device_apps={'ok':False,'error':'Selecione um dispositivo primeiro.'}
+                _da=st.session_state.get('device_apps') or {}
+                if _da.get('ok'):
+                    st.caption('Aplicativos detectados')
+                    for _a in _da.get('applications',[])[:14]:
+                        st.write(('●' if _a.get('available') else '○')+' '+str(_a.get('name','App')) )
+                elif _da.get('error'): st.caption('Apps: '+str(_da.get('error')))
+            else: st.caption('Nenhum dispositivo registrado.')
     with d[6]:
         with st.popover('SECURITY'):
             st.markdown('**SECURITY**'); st.write(f"Kill Switch: **{'ON' if _kill else 'OFF'}**"); st.write(f"Approvals: **{_pending}**"); st.caption('Permission Manager ativo.')
     with d[7]:
+        with st.popover(f"ALERTS{' • '+str(len(_notifications)) if _notifications else ''}"):
+            st.markdown('**NOTIFICATION CENTER**')
+            if _notifications:
+                for note in _notifications:
+                    icon = {'critical':'●','error':'!','warning':'!','info':'•'}.get(note.get('level'),'•')
+                    st.markdown(f"**{icon} {note.get('title','Aviso')}**")
+                    st.caption(note.get('text',''))
+                    if note.get('time'): st.caption(note['time'][:19].replace('T',' '))
+            else:
+                st.success('Nenhum alerta no momento.')
+    with d[8]:
+        with st.popover('FILES'):
+            st.markdown('**FILE & DOCUMENT CENTER • V14.5**')
+            _fc_path=st.text_input('Pasta', value='', placeholder='ex.: Projetos/MeuProjeto', key='fc_path')
+            if st.button('LISTAR', key='fc_list'):
+                st.session_state.fc_listing=queue_pc_action('list_files', {'name':_fc_path}, wait_seconds=10)
+            _fc=st.session_state.get('fc_listing') or {}
+            _fcr=_fc.get('result') or {}
+            if _fc.get('ok') and _fcr.get('itens') is not None:
+                for _item in _fcr.get('itens',[])[:30]:
+                    _icon='DIR' if _item.get('tipo')=='pasta' else 'FILE'
+                    _size='' if _item.get('tipo')=='pasta' else f" • {int(_item.get('bytes',0))/1024:.1f} KB"
+                    st.caption(f"{_icon}  {_item.get('nome','')} {_size}")
+            elif _fc.get('error'):
+                st.caption(str(_fc.get('error')))
+            st.divider()
+            _search_q=st.text_input('BUSCAR ARQUIVO', placeholder='nome ou parte do nome', key='fc_search_q')
+            _search_ext=st.text_input('EXTENSÃO', placeholder='pdf, docx, xlsx...', key='fc_search_ext')
+            if st.button('BUSCAR', key='fc_search'):
+                st.session_state.fc_search_result=queue_pc_action('search_files', {'query':_search_q.strip(),'root':_fc_path.strip(),'extension':_search_ext.strip()}, wait_seconds=15)
+            _fs=st.session_state.get('fc_search_result') or {}; _fsr=_fs.get('result') or {}
+            if _fs.get('ok'):
+                for _hit in _fsr.get('itens',[])[:20]: st.caption(f"FILE  {_hit.get('path')} • {int(_hit.get('bytes',0))/1024:.1f} KB")
+            elif _fs.get('error'): st.caption(str(_fs.get('error')))
+            st.divider()
+            _ws_name=st.text_input('NOVO WORKSPACE', placeholder='ex.: Projeto Escola', key='fc_ws_name')
+            if st.button('CRIAR WORKSPACE', key='fc_ws') and _ws_name.strip():
+                st.session_state.fc_ws_result=queue_pc_action('create_workspace', {'name':_ws_name.strip()}, wait_seconds=15)
+            _wsr=st.session_state.get('fc_ws_result') or {}
+            if _wsr: st.caption((_wsr.get('result') or {}).get('message') or _wsr.get('error') or '')
+            st.divider()
+            _upload=st.file_uploader('IMPORTAR DOCUMENTO', type=['pdf','docx','xlsx','xls','csv','txt','md','json','html','xml','rtf','pptx','ppt','png','jpg','jpeg','webp','zip'], key='fc_upload')
+            if _upload is not None and st.button('IMPORTAR', key='fc_import'):
+                _dest=(f"{_fc_path.strip().strip('/\\')}/{_upload.name}" if _fc_path.strip() else _upload.name)
+                _raw=_upload.getvalue()
+                if len(_raw)>8*1024*1024:
+                    st.error('Máximo de 8 MB por arquivo.')
+                else:
+                    st.session_state.fc_import_result=queue_pc_action('upload_file', {'name':_dest,'data_b64':base64.b64encode(_raw).decode('ascii')}, wait_seconds=20)
+                    st.rerun()
+            _imp=st.session_state.get('fc_import_result') or {}
+            if _imp:
+                st.caption((_imp.get('result') or {}).get('message') or _imp.get('error') or 'Importação concluída.')
+            st.divider()
+            _download_name=st.text_input('EXPORTAR ARQUIVO', placeholder='ex.: documentos/relatorio.pdf', key='fc_download_name')
+            if st.button('PREPARAR EXPORTAÇÃO', key='fc_export') and _download_name.strip():
+                st.session_state.fc_export_result=queue_pc_action('download_file', {'name':_download_name.strip()}, wait_seconds=15)
+            _exp=st.session_state.get('fc_export_result') or {}
+            _expr=_exp.get('result') or {}
+            if _exp.get('ok') and _expr.get('data_b64'):
+                try:
+                    _bytes=base64.b64decode(_expr['data_b64'])
+                    st.download_button('BAIXAR', data=_bytes, file_name=_expr.get('name','arquivo'), key='fc_download_btn')
+                except Exception as _e: st.caption(f'Falha na exportação: {_e}')
+            elif _exp.get('error'): st.caption(str(_exp.get('error')))
+            st.divider()
+            _zip_src=st.text_input('COMPACTAR', placeholder='ex.: Projetos/MeuProjeto', key='fc_zip_src')
+            _zip_dst=st.text_input('ZIP DE SAÍDA', placeholder='ex.: exports/meu_projeto.zip', key='fc_zip_dst')
+            if st.button('CRIAR ZIP', key='fc_zip') and _zip_src.strip() and _zip_dst.strip():
+                st.session_state.fc_zip_result=queue_pc_action('create_zip', {'src':_zip_src.strip(),'dst':_zip_dst.strip()}, wait_seconds=30)
+            _zr=st.session_state.get('fc_zip_result') or {}
+            if _zr: st.caption((_zr.get('result') or {}).get('message') or _zr.get('error') or '')
+    with d[9]:
         with st.popover('MISSIONS'):
             st.markdown('**MISSIONS**'); st.write(f"Running: **{len(_running)}**"); st.write(f"Done: **{len(_done)}**"); st.write(f"Failed: **{len(_failed)}**")
     st.markdown('</div>',unsafe_allow_html=True)
 
     # V13.3.4 — AI panel moved to the left; chat uses a fixed-height scroll viewport.
-    left,center,right=st.columns([1.0,1.55,1.18],gap='small')
+    left,center,right=st.columns([1.0,1.55,1.18])
     with left:
         st.markdown(f'''<div class="refined-ai"><div class="refined-ai-head"><span>JARVIS AI</span><span>AGENT LOOP • TOOLS</span></div><div class="refined-ai-orb">J</div><div class="refined-ai-status"><b>{_cur_agent}</b> • {_cur_status}</div><div class="refined-ai-action">{_cur_action}</div><div class="refined-loop"><span>PLANNER</span><i>→</i><span>AGENT</span><i>→</i><span>TOOLS</span><i>→</i><span>VERIFY</span></div></div>''',unsafe_allow_html=True)
         st.markdown(f'''<div class="refined-card"><div class="refined-title">SYSTEM STATUS</div><div class="refined-row"><span>CORE</span><b class="refined-ok">ONLINE</b></div><div class="refined-row"><span>LOCAL AGENT</span><b class="{'refined-ok' if _online else 'refined-bad'}">{'ONLINE' if _online else 'OFFLINE'}</b></div><div class="refined-row"><span>SECURITY</span><b class="{'refined-bad' if _kill else 'refined-ok'}">{'LOCKED' if _kill else 'ACTIVE'}</b></div><div class="refined-row"><span>APPROVALS</span><b class="refined-warn">{_pending:02d}</b></div></div>''',unsafe_allow_html=True)
         st.markdown(f'''<div class="refined-card"><div class="refined-title">TELEMETRY</div><div class="refined-row"><span>CPU</span><b>{_info.get('cpu_percent','—')}%</b></div><div class="refined-row"><span>RAM</span><b>{_info.get('ram_em_uso_percent','—')}%</b></div><div class="refined-row"><span>DEVICES</span><b>{len(_online_devices)}/{len(_devices)}</b></div><div class="refined-row"><span>EVENTS</span><b>{len(_events):04d}</b></div></div>''',unsafe_allow_html=True)
     with center:
-        st.markdown(f'''<div class="refined-center"><div class="refined-grid"></div><div class="refined-orb"><div class="refined-ring r3"></div><div class="refined-ring r1"></div><div class="refined-ring r2"></div><div class="refined-core"><strong>{len(_running):02d}</strong><span>ACTIVE</span></div></div><div class="refined-caption">JARVIS CORE • {len(_running):02d} ACTIVE MISSIONS • V13.3.4</div></div>''',unsafe_allow_html=True)
+        st.markdown(f'''<div class="refined-center"><div class="refined-grid"></div><div class="refined-orb"><div class="refined-ring r3"></div><div class="refined-ring r1"></div><div class="refined-ring r2"></div><div class="refined-core"><strong>{len(_running):02d}</strong><span>ACTIVE</span></div></div><div class="refined-caption">JARVIS CORE • {len(_running):02d} ACTIVE MISSIONS • V14.5</div></div>''',unsafe_allow_html=True)
         st.markdown(f'''<div class="refined-card"><div class="refined-title">CURRENT OPERATION</div><div class="refined-row"><span>AGENT</span><b>{_cur_agent}</b></div><div class="refined-row"><span>STATUS</span><b class="refined-warn">{_cur_status}</b></div><div class="refined-row"><span>DURATION</span><b>{_dur_text}</b></div><div style="color:#766b6b;font-size:.57rem;margin-top:.5rem;line-height:1.4">{_cur_action}</div></div>''',unsafe_allow_html=True)
     with right:
         if 'hud_ai_history' not in st.session_state:

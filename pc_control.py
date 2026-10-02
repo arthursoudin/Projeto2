@@ -32,10 +32,14 @@ APPS = {
     'vscode': ['vs code', 'vscode', 'visual studio code'],
     'notepad': ['bloco de notas', 'notepad'],
     'calculator': ['calculadora', 'calculator'],
-    'browser': ['navegador', 'chrome', 'google chrome', 'edge'],
+    'browser': ['navegador'],
+    'chrome': ['chrome', 'google chrome'],
+    'edge': ['edge', 'microsoft edge'],
     'paint': ['paint'],
     'explorer': ['explorador de arquivos', 'explorer'],
     'word': ['word'], 'excel': ['excel'], 'powerpoint': ['powerpoint'],
+    'dbeaver': ['dbeaver'], 'intellij': ['intellij', 'intellij idea', 'idea'],
+    'pgadmin': ['pgadmin', 'pgadmin4'], 'obsidian': ['obsidian'],
     'taskmgr': ['gerenciador de tarefas'],
 }
 

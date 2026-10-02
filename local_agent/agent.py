@@ -19,11 +19,13 @@ import time
 import webbrowser
 import uuid
 import getpass
+import base64
+import zipfile
 from urllib.parse import quote_plus, urlparse
 
 import requests
 
-VERSION = "13.0.0"
+VERSION = "14.5.0"
 BASE_DIR = pathlib.Path(__file__).resolve().parent
 CONFIG_FILE = BASE_DIR / "config.json"
 
@@ -88,7 +90,7 @@ if not str(CONFIG.get("device_id") or "").strip():
 
 
 def headers():
-    return {"X-Agent-Token": CONFIG["token"], "Content-Type": "application/json"}
+    return {"X-Agent-Token": CONFIG["token"], "X-Device-ID": CONFIG.get("device_id", ""), "Content-Type": "application/json"}
 
 
 # ------------------------------------------------------------ segurança
@@ -176,44 +178,96 @@ def _open_with(target, app):
         _startfile(target)
 
 
-APPS = {
-    "notepad": ("popen", ["notepad.exe"]),
-    "calculator": ("popen", ["calc.exe"]),
-    "paint": ("popen", ["mspaint.exe"]),
-    "taskmgr": ("popen", ["taskmgr.exe"]),
-    "word": ("startfile", "winword"),
-    "excel": ("startfile", "excel"),
-    "powerpoint": ("startfile", "powerpnt"),
+APP_DEFINITIONS = {
+    "notepad": {"label": "Bloco de Notas", "kind": "popen", "target": ["notepad.exe"], "aliases": ["notepad", "bloco de notas"]},
+    "calculator": {"label": "Calculadora", "kind": "popen", "target": ["calc.exe"], "aliases": ["calculadora", "calculator"]},
+    "paint": {"label": "Paint", "kind": "popen", "target": ["mspaint.exe"], "aliases": ["paint"]},
+    "taskmgr": {"label": "Gerenciador de Tarefas", "kind": "popen", "target": ["taskmgr.exe"], "aliases": ["gerenciador de tarefas", "task manager"]},
+    "word": {"label": "Microsoft Word", "kind": "startfile", "target": "winword", "aliases": ["word", "microsoft word"]},
+    "excel": {"label": "Microsoft Excel", "kind": "startfile", "target": "excel", "aliases": ["excel", "microsoft excel"]},
+    "powerpoint": {"label": "Microsoft PowerPoint", "kind": "startfile", "target": "powerpnt", "aliases": ["powerpoint", "power point"]},
+    "chrome": {"label": "Google Chrome", "kind": "exe", "target": ["chrome.exe"], "aliases": ["chrome", "google chrome"]},
+    "edge": {"label": "Microsoft Edge", "kind": "exe", "target": ["msedge.exe"], "aliases": ["edge", "microsoft edge"]},
+    "vscode": {"label": "Visual Studio Code", "kind": "vscode", "target": [], "aliases": ["vs code", "vscode", "visual studio code"]},
+    "dbeaver": {"label": "DBeaver", "kind": "exe_candidates", "target": ["dbeaver.exe"], "aliases": ["dbeaver"]},
+    "intellij": {"label": "IntelliJ IDEA", "kind": "exe_candidates", "target": ["idea64.exe", "idea.exe"], "aliases": ["intellij", "intellij idea", "idea"]},
+    "pgadmin": {"label": "pgAdmin", "kind": "exe_candidates", "target": ["pgAdmin4.exe", "pgadmin4.exe"], "aliases": ["pgadmin", "pgadmin4"]},
+    "obsidian": {"label": "Obsidian", "kind": "exe_candidates", "target": ["Obsidian.exe"], "aliases": ["obsidian"]},
 }
 
+# Compatibilidade com módulos antigos que consultam APPS.
+APPS = {k: (v["kind"], v["target"]) for k, v in APP_DEFINITIONS.items() if v["kind"] in {"popen", "startfile"}}
+
+def _find_app_exe(candidates):
+    for name in candidates or []:
+        found = shutil.which(name)
+        if found:
+            return found
+    roots = [
+        os.environ.get("LOCALAPPDATA", ""),
+        os.environ.get("PROGRAMFILES", ""),
+        os.environ.get("PROGRAMFILES(X86)", ""),
+    ]
+    # Procuramos somente em diretórios de instalação conhecidos; sem varrer o disco inteiro.
+    for root in [r for r in roots if r]:
+        for rel in ("Google/Chrome/Application", "Microsoft/Edge/Application", "DBeaver", "JetBrains", "PostgreSQL", "Obsidian"):
+            base = os.path.join(root, rel)
+            if not os.path.isdir(base):
+                continue
+            for name in candidates or []:
+                direct = os.path.join(base, name)
+                if os.path.isfile(direct):
+                    return direct
+    return None
+
+def list_apps():
+    rows=[]
+    for key, spec in APP_DEFINITIONS.items():
+        available = False
+        detail = ''
+        if spec['kind'] == 'vscode':
+            available = bool(_find_vscode())
+            detail = _find_vscode() or ''
+        elif spec['kind'] == 'popen':
+            available = bool(shutil.which(spec['target'][0]))
+        elif spec['kind'] == 'startfile':
+            available = True  # Windows resolve via associação/Office; abertura confirma no runtime.
+        else:
+            path = _find_app_exe(spec['target']); available = bool(path); detail = path or ''
+        rows.append({'id': key, 'name': spec['label'], 'available': available, 'path': detail, 'aliases': spec['aliases']})
+    return {'ok': True, 'applications': rows, 'count': len(rows)}
 
 def open_app(app):
-    app = str(app or "").lower().strip()
+    app = str(app or '').lower().strip()
+    if app == 'browser':
+        app = 'chrome'
+    spec = APP_DEFINITIONS.get(app)
+    if not spec:
+        # aliases
+        for key, item in APP_DEFINITIONS.items():
+            if app in item.get('aliases', []):
+                spec = item; app = key; break
+    if not spec:
+        return _err("Aplicativo não permitido: %s. Use list_apps para consultar os permitidos." % app)
     try:
-        if app == "vscode":
+        kind, target = spec['kind'], spec['target']
+        if kind == 'vscode':
             exe = _find_vscode()
-            if not exe:
-                return _err("VS Code não encontrado. Verifique se está instalado.")
-            subprocess.Popen([exe])
-        elif app == "browser":
-            webbrowser.open("https://www.google.com")
-        elif app == "explorer":
-            _startfile(JARVIS_HOME)
-        elif app in APPS:
-            kind, target = APPS[app]
-            if kind == "popen":
-                subprocess.Popen(target, shell=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            else:
-                _startfile(target)
+            if not exe: return _err("VS Code não encontrado. Verifique se está instalado.")
+            subprocess.Popen([exe], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        elif kind == 'popen':
+            subprocess.Popen(target, shell=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        elif kind == 'startfile':
+            _startfile(target)
         else:
-            return _err(f"Aplicativo não permitido: {app}. Permitidos: vscode, browser, explorer, "
-                        + ", ".join(sorted(APPS)))
-        return _ok(f"Aplicativo '{app}' aberto.")
+            exe = _find_app_exe(target)
+            if not exe: return _err(f"{spec['label']} não foi encontrado neste computador.")
+            subprocess.Popen([exe], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return _ok(f"Aplicativo '{spec['label']}' aberto.")
     except FileNotFoundError:
-        return _err(f"O aplicativo '{app}' não foi encontrado neste computador.")
+        return _err(f"O aplicativo '{spec['label']}' não foi encontrado neste computador.")
     except Exception as e:
-        return _err(f"Erro ao abrir '{app}': {e}")
-
+        return _err(f"Erro ao abrir '{spec['label']}': {e}")
 
 def open_folder(name="", app=None):
     try:
@@ -276,6 +330,107 @@ def create_folder(name):
     except Exception as e:
         return _err(f"Erro ao criar pasta: {e}")
 
+
+
+MAX_BINARY = 8 * 1024 * 1024
+ALLOWED_DOCUMENT_EXT = {
+    ".pdf", ".docx", ".xlsx", ".xls", ".csv", ".txt", ".md", ".json", ".html", ".htm",
+    ".xml", ".rtf", ".pptx", ".ppt", ".png", ".jpg", ".jpeg", ".webp", ".zip"
+}
+
+def _check_document_ext(target):
+    _check_ext(target)
+    if target.suffix.lower() not in ALLOWED_DOCUMENT_EXT:
+        raise ValueError(f"Formato não permitido no File Center: {target.suffix or '(sem extensão)'}")
+
+def upload_file(name, data_b64, overwrite=False):
+    try:
+        target = safe_path(name)
+        _protect(target); _check_document_ext(target)
+        if not target.parent.is_dir():
+            return _err(f"A pasta de destino não existe: {target.parent}")
+        if target.exists() and not overwrite:
+            return _err(f"O arquivo já existe: {target}")
+        raw = base64.b64decode(str(data_b64 or ''), validate=True)
+        if len(raw) > MAX_BINARY:
+            return _err(f"Arquivo grande demais (máximo {MAX_BINARY // (1024*1024)} MB).")
+        target.write_bytes(raw)
+        return _ok(f"Arquivo importado: {target.name}", path=str(target), bytes=len(raw))
+    except Exception as e:
+        return _err(f"Erro ao importar arquivo: {e}")
+
+def download_file(name):
+    try:
+        target = safe_path(name)
+        if not target.is_file(): return _err(f"O arquivo não existe: {target}")
+        size = target.stat().st_size
+        if size > MAX_BINARY: return _err(f"Arquivo grande demais para exportar (máximo {MAX_BINARY // (1024*1024)} MB).")
+        return _ok(f"Arquivo pronto para exportação: {target.name}", path=str(target), name=target.name, bytes=size, data_b64=base64.b64encode(target.read_bytes()).decode('ascii'))
+    except Exception as e:
+        return _err(f"Erro ao exportar arquivo: {e}")
+
+def create_zip(src, dst):
+    try:
+        source = safe_path(src); target = safe_path(dst)
+        _protect(source); _protect(target)
+        if not source.exists(): return _err(f"Origem não existe: {source}")
+        if target.suffix.lower() != '.zip': raise ValueError('O destino precisa terminar em .zip')
+        _check_ext(target)
+        if target.exists(): return _err(f"Já existe: {target}")
+        if not target.parent.is_dir(): return _err(f"A pasta de destino não existe: {target.parent}")
+        with zipfile.ZipFile(target, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
+            if source.is_file(): zf.write(source, arcname=source.name)
+            else:
+                for item in source.rglob('*'):
+                    if item.is_file() and TRASH not in item.parents:
+                        zf.write(item, arcname=str(item.relative_to(source)))
+        return _ok(f"Arquivo ZIP criado: {target.name}", path=str(target), bytes=target.stat().st_size)
+    except Exception as e:
+        return _err(f"Erro ao criar ZIP: {e}")
+
+
+def search_files(query, root="", extension=""):
+    try:
+        base=safe_path(root)
+        if not base.is_dir(): return _err(f"A pasta não existe: {base}")
+        q=str(query or '').strip().lower()
+        ext=str(extension or '').strip().lower()
+        if ext and not ext.startswith('.'): ext='.'+ext
+        found=[]
+        for item in base.rglob('*'):
+            if not item.is_file() or item.name.startswith('.'): continue
+            if q and q not in item.name.lower(): continue
+            if ext and item.suffix.lower()!=ext: continue
+            found.append({'nome':item.name,'path':str(item.relative_to(JARVIS_HOME)),'bytes':item.stat().st_size,'ext':item.suffix.lower()})
+            if len(found)>=100: break
+        return _ok(f"{len(found)} resultado(s)", query=q, itens=found, truncated=len(found)>=100)
+    except Exception as e:
+        return _err(f"Erro na busca: {e}")
+
+def create_workspace(name):
+    try:
+        root=safe_path(f"Projetos/{_check_part(str(name or ''))}")
+        _protect(root)
+        if root.exists(): return _err(f"Workspace já existe: {root.name}")
+        for sub in ('Documentos','Arquivos','Exports','Imports','Notas'):
+            (root/sub).mkdir(parents=True, exist_ok=False)
+        return _ok(f"Workspace '{root.name}' criado", path=str(root), folders=['Documentos','Arquivos','Exports','Imports','Notas'])
+    except Exception as e:
+        return _err(f"Erro ao criar workspace: {e}")
+
+def document_info(name):
+    try:
+        target=safe_path(name)
+        if not target.is_file(): return _err(f"O arquivo não existe: {target}")
+        ext=target.suffix.lower()
+        text_ext={'.txt','.md','.csv','.json','.html','.htm','.xml','.rtf'}
+        info={'name':target.name,'path':str(target),'extension':ext,'bytes':target.stat().st_size,'kind':'document' if ext in ALLOWED_DOCUMENT_EXT else 'file'}
+        if ext in text_ext and target.stat().st_size <= 2_000_000:
+            raw=target.read_text(encoding='utf-8',errors='replace')
+            info.update({'preview':raw[:MAX_READ],'truncated':len(raw)>MAX_READ})
+        return _ok(f"Informações de {target.name}", **info)
+    except Exception as e:
+        return _err(f"Erro ao inspecionar documento: {e}")
 
 def create_file(name, content=""):
     try:
@@ -768,7 +923,7 @@ def build_heartbeat():
         "device_id": CONFIG.get("device_id"),
         "version": VERSION,
         "computer": platform.node(),
-        "capabilities": ["computer", "filesystem", "browser", "scheduler"],
+        "capabilities": ["computer", "filesystem", "browser", "scheduler", "app_control", "app_inventory", "file_manager", "document_center", "import_export", "zip"],
         "cpu_percent": _cpu_percent(),
           "jarvis_folder": str(JARVIS_HOME.resolve())}
     for part in (_memory_info(), _disk_info(), _uptime_info()):
@@ -799,6 +954,7 @@ def heartbeat_loop():
 # --------------------------------------------------------------- despacho
 ACTIONS = {
     "open_app": lambda p: open_app(p.get("app")),
+    "list_apps": lambda p: list_apps(),
     "open_folder": lambda p: open_folder(p.get("name", ""), p.get("app")),
     "open_file": lambda p: open_file(p.get("name"), p.get("app")),
     "open_url": lambda p: open_url(p.get("url")),
@@ -812,6 +968,12 @@ ACTIONS = {
     "copy_path": lambda p: copy_path(p.get("src"), p.get("dst"), p.get("into_folder", False)),
     "rename_path": lambda p: rename_path(p.get("name"), p.get("new_name")),
     "delete_path": lambda p: delete_path(p.get("name"), p.get("confirmed")),
+    "upload_file": lambda p: upload_file(p.get("name"), p.get("data_b64"), p.get("overwrite", False)),
+    "download_file": lambda p: download_file(p.get("name")),
+    "create_zip": lambda p: create_zip(p.get("src"), p.get("dst")),
+    "document_info": lambda p: document_info(p.get("name")),
+    "search_files": lambda p: search_files(p.get("query", ""), p.get("root", ""), p.get("extension", "")),
+    "create_workspace": lambda p: create_workspace(p.get("name")),
     "system_info": lambda p: system_info(),
     "read_log": lambda p: read_log(p.get("lines", 20)),
     "schedule_add": lambda p: schedule_add(p.get("when"), p.get("steps"), p.get("resumo", "")),

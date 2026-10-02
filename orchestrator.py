@@ -9,7 +9,7 @@ import secrets
 from datetime import datetime, timezone
 import store
 
-VERSION = "13.3.1"
+VERSION = "14.0.0"
 EVENT_LIMIT = 300
 MISSION_LIMIT = 100
 
@@ -163,6 +163,7 @@ def capabilities():
         "channels": ["dashboard", "whatsapp"],
         "security": ["risk", "approval", "audit", "kill_switch", "limits"],
         "foundation": ["timeline", "missions", "component_status"],
-        "future_ready": ["multi_pc", "file_manager", "app_agents", "workflows"],
+        "future_ready": ["file_manager", "document_manager", "app_agents", "workflows"],
+        "device_app_control": ["multi_pc", "device_manager", "app_inventory", "safe_app_launch"],
         "live_operations": ["operation_id", "agent_state", "duration_ms", "current_action", "result_preview"],
     }
