@@ -1,49 +1,52 @@
-# Jarvis V11 — Local Agent + Controle Seguro do PC
+# Jarvis V11.9
 
-A V11 mantém a interface/IA/memória/tarefas da V10 e adiciona um agente local para executar apenas ações explicitamente permitidas no Windows.
+Interface + IA + memória + tarefas (Render) e um agente local que controla o seu PC
+com permissões. Nada de shell livre: cada ação é uma função fixa.
 
-## Arquitetura
+## Como atualizar (3 passos)
 
-Render: Jarvis + OpenRouter + Honcho + tarefas + gateway.
-PC: `local_agent/agent.py` faz polling no gateway e executa somente `open_app` e `create_folder`.
+1. Extraia este zip **por cima** da sua pasta `Codes` (substituir). O `.git` não é afetado.
+2. `git add .` → `git commit -m "v11.9"` → `git push` (o Render faz o deploy sozinho).
+3. No PC, abra `local_agent/start_agent.bat`. Na primeira vez ele pergunta a URL do Gateway
+   e o token e salva em `config.json`. Depois é só abrir e deixar a janela aberta.
 
-## Render
+**Variáveis do Render: nada muda** (`OPENROUTER_API_KEY`, `HONCHO_API_KEY`,
+`JARVIS_GATEWAY_URL`, `LOCAL_AGENT_TOKEN`). O `setup_agent.bat` não existe mais.
 
-### projeto2-1 (Interface)
-Mantenha `OPENROUTER_API_KEY` e `HONCHO_API_KEY`.
-Adicione:
-- `JARVIS_GATEWAY_URL` = URL pública do projeto2-2
-- `LOCAL_AGENT_TOKEN` = um token secreto escolhido por você
+## O que dá para pedir
 
-### projeto2-2 (Gateway)
-Adicione a mesma variável:
-- `LOCAL_AGENT_TOKEN` = exatamente o mesmo token usado no projeto2-1
+| Tipo | Exemplos |
+|---|---|
+| Pastas e arquivos | `crie uma pasta Estudos` · `crie um arquivo notas.txt com o texto olá` · `leia o arquivo notas.txt` · `escreva no arquivo notas.txt o texto mais uma linha` · `liste os arquivos da pasta Estudos` |
+| Organizar | `mova o arquivo notas.txt para a pasta Estudos` · `copie notas.txt para copia.txt` · `renomeie o arquivo notas.txt para ideias.txt` |
+| Apagar (pede confirmação) | `apague o arquivo notas.txt` → o Jarvis pergunta → `sim` |
+| Aplicativos | `abra o vs code` · bloco de notas · calculadora · paint · word · excel · powerpoint · gerenciador de tarefas · explorador |
+| Navegador | `abra o youtube` · `abra o site github.com` · `pesquise gatos no google` · `no youtube pesquise lofi` |
+| Abrir com programa | `abra a pasta Estudos no vs code` · `abra o arquivo notas.txt no bloco de notas` |
+| Sistema | `informações do meu sistema` · `quanta RAM eu tenho?` |
+| Compostos | `crie uma pasta Projetos e dentro dela um arquivo ideias.txt, depois abra a pasta no vs code` |
 
-Start command do gateway:
-`uvicorn gateway:app --host 0.0.0.0 --port $PORT`
+Para encadear use **"e depois"**, **"depois"**, **"em seguida"** ou `;`.
+Para colocar algo em uma pasta recém-criada diga **"dentro dela"**; sem isso fica na raiz.
 
-## PC Windows — sem administrador
+## Regras de segurança
 
-1. Abra `local_agent/setup_agent.bat`.
-2. Informe a URL do gateway.
-3. Informe o mesmo `LOCAL_AGENT_TOKEN` do Render.
-4. Execute `start_agent.bat`.
+- Tudo acontece dentro de `C:\Users\<você>\Jarvis`. Caminhos com `..` ou fora dela são recusados.
+- **Apagar não apaga de verdade**: o item vai para `Jarvis\.lixeira` e pode ser restaurado.
+- Não cria, renomeia nem abre `.exe .bat .cmd .ps1 .vbs .js .lnk` e similares.
+- Sites: só `http/https`. Aplicativos: só a lista acima.
+- Tudo o que o agente faz fica em `Jarvis\.jarvis_agente.log` (também na aba **Sistema**).
+- Nunca suba `local_agent/config.json` para o GitHub (já está no `.gitignore`).
+  Se o token já foi publicado, troque-o no Render e no `config.json`.
 
-O agente não instala serviço de administrador. Ele roda como usuário normal.
+## Solução de problemas
 
-## Ações V11
+- **"O agente local não respondeu"**: a janela do `start_agent.bat` está fechada, ou o token difere do Render.
+- **"Token recusado"** no terminal do agente: apague `local_agent/config.json` e abra o `.bat` de novo.
+- **VS Code não abre**: instale-o pelo instalador oficial (o agente procura o `Code.exe`).
+- O plano free do Render dorme: o primeiro comando depois de um tempo parado pode demorar.
 
-- Abrir VS Code
-- Abrir Bloco de Notas
-- Abrir Calculadora
-- Abrir navegador
-- Criar pasta dentro de `%USERPROFILE%\\Jarvis`
+## Arquivos
 
-A lista é propositalmente pequena nesta primeira versão. Não há shell remoto genérico.
-
-
-## V11.2 — Controle local expandido
-Além de abrir aplicativos e criar pastas, o agente local permite abrir pastas/arquivos somente dentro de `~/Jarvis`, criar arquivos nesse espaço e consultar informações básicas do computador. Não existe execução arbitrária de shell.
-
-
-V11.2: o Gateway aguarda o resultado real do Local Agent antes de entregar a resposta ao modelo.
+`app.py` interface · `pc_control.py` interpretador de comandos e permissões ·
+`gateway.py` ponte Render ↔ PC · `local_agent/agent.py` executor no Windows

@@ -25,7 +25,7 @@ VOICE_PITCH=os.getenv('EDGE_TTS_PITCH','+0Hz')
 MEMORY_FILE=Path('.jarvis_memory.json'); TASKS_FILE=Path('.jarvis_tasks.json')
 client=OpenAI(base_url='https://openrouter.ai/api/v1',api_key=API_KEY) if API_KEY else None
 
-DEFAULTS={'messages':[],'tasks':[],'memory':{},'last_action':None,'session_id':uuid.uuid4().hex,'honcho_status':'não configurado','honcho_context':''}
+DEFAULTS={'messages':[],'tasks':[],'memory':{},'last_action':None,'session_id':uuid.uuid4().hex,'honcho_status':'não configurado','honcho_context':'','pending_pc':None}
 for k,v in DEFAULTS.items():
     if k not in st.session_state: st.session_state[k]=v
 
@@ -236,7 +236,7 @@ def execute_tool(text):
     return None,None
 
 def system_prompt(memory_context=''):
-    return '''Você é Jarvis, assistente pessoal em português do Brasil. Seja direto, inteligente, útil e honesto. Use memória e tarefas como contexto, sem inventar fatos. Se algo estiver incerto, diga isso. Quando uma ferramenta já tiver executado uma ação, explique o resultado sem fingir que fará outra ação.\nSkills: %s\nControle local do PC: somente por agente autorizado e ações permitidas.\nMemória local: %s\nTarefas: %s\nResumo de tarefas: %s\nMemória Honcho recuperada: %s''' % (json.dumps(list(SKILLS),ensure_ascii=False),json.dumps(st.session_state.memory,ensure_ascii=False),json.dumps(st.session_state.tasks,ensure_ascii=False),json.dumps(task_summary(),ensure_ascii=False),memory_context or 'nenhuma')
+    return '''Você é Jarvis, assistente pessoal em português do Brasil. Seja direto, inteligente, útil e honesto. Use memória e tarefas como contexto, sem inventar fatos. Se algo estiver incerto, diga isso. Quando uma ferramenta já tiver executado uma ação, explique o resultado sem fingir que fará outra ação.\nSkills: %s\nControle local do PC: somente por agente autorizado e ações permitidas. Só diga que algo foi feito se o resultado da ferramenta tiver ok=true; se houver erro, explique o erro e como resolver. Se estiver AGUARDANDO CONFIRMAÇÃO, nada foi executado ainda.\nMemória local: %s\nTarefas: %s\nResumo de tarefas: %s\nMemória Honcho recuperada: %s''' % (json.dumps(list(SKILLS),ensure_ascii=False),json.dumps(st.session_state.memory,ensure_ascii=False),json.dumps(st.session_state.tasks,ensure_ascii=False),json.dumps(task_summary(),ensure_ascii=False),memory_context or 'nenhuma')
 
 def ask_llm(user_text,tool_result=None,memory_context=''):
     if not client: return 'OPENROUTER_API_KEY não configurada.'
@@ -269,27 +269,28 @@ def queue_pc_action(action, params=None, wait_seconds=15):
             rr=requests.get(f'{GATEWAY_URL}/agent/results',headers=headers,timeout=10); rr.raise_for_status()
             for item in rr.json().get('results',[]):
                 if item.get('command_id')==command_id:
-                    return {'ok':bool(item.get('ok')),'command_id':command_id,'action':action,'result':item.get('result')}
+                    res=item.get('result') or {}
+                    return {'ok':bool(res.get('ok', item.get('ok'))),'command_id':command_id,'action':action,'result':res}
             time.sleep(1)
         return {'ok':False,'command_id':command_id,'action':action,'error':'O agente local não respondeu no tempo esperado. Verifique se start_agent.bat está aberto.'}
     except Exception as e:
         return {'ok':False,'error':str(e)}
 
-def detect_pc_action(text):
-    l=text.lower().strip()
-    apps={'vscode':['vs code','vscode','visual studio code'],'notepad':['bloco de notas','notepad'],'calculator':['calculadora','calculator'],'browser':['navegador','chrome','google chrome'],'paint':['paint']}
-    if any(x in l for x in ['abra ','abrir ','inicie ','iniciar ']):
-        for app,keys in apps.items():
-            if any(k in l for k in keys): return ('open_app',{'app':app})
-    m=re.match(r'^(?:abra|abrir) (?:a )?(?:pasta )?(.+)$',l)
-    if m and ('pasta' in l): return ('open_folder',{'name':m.group(1).replace('pasta ','',1).strip(' .')})
-    if l.startswith('crie uma pasta ') or l.startswith('criar uma pasta '):
-        name=re.sub(r'^(crie|criar) uma pasta ','',l,flags=re.I).strip(' .');
-        if name: return ('create_folder',{'name':name})
-    if l.startswith('crie um arquivo ') or l.startswith('criar um arquivo '):
-        name=re.sub(r'^(crie|criar) um arquivo ','',l,flags=re.I).strip(' .'); return ('create_file',{'name':name,'content':''}) if name else None
-    if 'informações do meu pc' in l or 'informações do computador' in l or 'info do pc' in l: return ('system_info',{})
-    return None
+from pc_control import parse_pc_commands, PERMISSIONS, CONFIRM_ACTIONS, describe_step, is_confirm, is_cancel
+
+def run_pc_plan(steps, confirmed=False):
+    """Executa os passos em ordem. Ações sensíveis esperam confirmação. Para no primeiro erro."""
+    done=[]
+    for i,(action,params) in enumerate(steps):
+        if action in CONFIRM_ACTIONS and not confirmed:
+            st.session_state.pending_pc=steps[i:]
+            return done,'confirm'
+        p=dict(params)
+        if action in CONFIRM_ACTIONS: p['confirmed']=True
+        r=queue_pc_action(action,p)
+        done.append({'acao':describe_step(action,params),'ok':r.get('ok'),'resultado':r.get('result') or r.get('error')})
+        if not r.get('ok'): return done,'error'
+    return done,'ok'
 
 def save_memory_item(key,value):
     st.session_state.memory[str(key)]=str(value)
@@ -297,7 +298,7 @@ def save_memory_item(key,value):
     return f'Memória local salva: {value}'
 
 st.set_page_config(page_title='Jarvis V11',page_icon='J',layout='wide')
-st.title('Jarvis V11.2'); st.caption('Agente pessoal • Honcho Memory • Tarefas • Controle seguro do PC • Arquivos/Pastas • Skills • Tools • Web • Edge TTS • retorno real do PC')
+st.title('Jarvis V11.9'); st.caption('Agente pessoal • Memória • Tarefas • PC: arquivos, apps, navegador, comandos compostos • Permissões • Voz')
 with st.sidebar:
     st.header('Sistema'); st.metric('Modelo',MODEL.split('/')[-1][:24]); st.metric('Skills',len(SKILLS)); st.metric('Tarefas',len(st.session_state.tasks)); st.metric('Pendentes',task_summary()['pendentes']); st.metric('Memórias locais',len(st.session_state.memory)); st.write('**PC Agent:**', 'configurado' if (GATEWAY_URL and LOCAL_AGENT_TOKEN) else 'não configurado')
     st.write('**Honcho:**',st.session_state.honcho_status)
@@ -313,14 +314,29 @@ with tabs[0]:
     if prompt:
         st.session_state.messages.append({'role':'user','content':prompt})
         with st.chat_message('user'): st.markdown(prompt)
-        skills=detect_skills(prompt); pc_action=detect_pc_action(prompt); tool,result=execute_tool(prompt)
-        if pc_action:
-            a,params=pc_action; pc_result=queue_pc_action(a,params); tool='computer'; result=str(pc_result)
+        skills=detect_skills(prompt); tool=None; result=None; confirm_note=''
+        pending=st.session_state.pending_pc
+        if pending:
+            st.session_state.pending_pc=None
+            if is_confirm(prompt):
+                done,status=run_pc_plan(pending,confirmed=True); tool='computer'; result=json.dumps({'confirmado':True,'acoes':done,'status':status},ensure_ascii=False)
+            elif is_cancel(prompt):
+                tool='computer'; result='O usuário cancelou a ação pendente. Nada foi executado.'
+        if tool is None:
+            steps=parse_pc_commands(prompt)
+            if steps:
+                done,status=run_pc_plan(steps); tool='computer'
+                result=json.dumps({'acoes':done,'status':status},ensure_ascii=False)
+                if status=='confirm':
+                    todo=', '.join(describe_step(a,p) for a,p in st.session_state.pending_pc if a in CONFIRM_ACTIONS)
+                    result+=f' | AGUARDANDO CONFIRMAÇÃO do usuário para: {todo}. Nada disso foi executado ainda.'
+                    confirm_note=f'\n\n⚠️ **Confirma?** {todo} — responda **sim** ou **não**. (Itens apagados vão para a lixeira do Jarvis e podem ser restaurados.)'
+            else: tool,result=execute_tool(prompt)
         context=honcho_context(prompt); st.session_state.honcho_context=context
         st.session_state.last_action={'skills':skills,'tool':tool,'result':result,'session_id':st.session_state.session_id}
         with st.chat_message('assistant'):
             try:
-                answer=ask_llm(prompt,result,context); st.markdown(answer); st.session_state.messages.append({'role':'assistant','content':answer}); honcho_save_turn(prompt,answer)
+                answer=ask_llm(prompt,result,context)+confirm_note; st.markdown(answer); st.session_state.messages.append({'role':'assistant','content':answer}); honcho_save_turn(prompt,answer)
                 try: asyncio.run(make_audio(answer,'/tmp/jarvis_v10.mp3')); st.audio('/tmp/jarvis_v10.mp3',format='audio/mp3',autoplay=True)
                 except Exception as e: st.caption(f'Áudio indisponível: {e}')
             except Exception as e: st.error(f'Erro no Jarvis: {e}')
@@ -363,3 +379,5 @@ with tabs[5]:
         with st.expander(n): st.write(s['description']); st.write(', '.join(s['keywords']))
 with tabs[6]:
     st.json(st.session_state.last_action or {'status':'Nenhuma ação executada'}); st.write('Voz:',VOICE); st.write('Modelo:',MODEL); st.write('Horário:',current_time()); st.write('Gateway:',GATEWAY_URL or 'não configurado'); st.write('Agente local:', 'configurado' if LOCAL_AGENT_TOKEN else 'não configurado')
+    st.subheader('Permissões do PC'); st.table([{'Ação':a,'Nível':l} for a,l in PERMISSIONS.items()])
+    if st.button('Ver log do agente local'): st.json(queue_pc_action('read_log',{'lines':25}))
