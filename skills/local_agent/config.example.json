@@ -1,0 +1,5 @@
+{
+  "gateway_url": "https://SEU-GATEWAY.onrender.com",
+  "token": "O-MESMO-TOKEN-DO-RENDER",
+  "poll_seconds": 1
+}
