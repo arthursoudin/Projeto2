@@ -442,7 +442,8 @@ button[kind="secondary"]{border-color:rgba(255,59,48,.18)!important}button[kind=
 .refined-dock .stPopover>button{min-height:32px!important;height:32px!important;padding:.15rem .5rem!important;background:#07090a!important;border:1px solid rgba(255,59,48,.18)!important;color:#a99f9f!important;font-size:.55rem!important;letter-spacing:.11em!important}.refined-dock .stPopover>button:hover{border-color:rgba(255,59,48,.55)!important;color:#ff8179!important}
 .refined-card{border:1px solid rgba(255,59,48,.16);background:linear-gradient(180deg,rgba(13,9,10,.9),rgba(5,6,8,.94));border-radius:7px;padding:.72rem;margin-bottom:.65rem;box-shadow:inset 0 0 25px rgba(255,59,48,.018)}.refined-title{color:#ff5b52;font-size:.56rem;letter-spacing:.18em;text-transform:uppercase;margin-bottom:.5rem}.refined-row{display:flex;justify-content:space-between;padding:.34rem 0;border-bottom:1px solid rgba(255,59,48,.07);color:#6f6a6a;font-size:.63rem}.refined-row:last-child{border-bottom:0}.refined-row b{color:#e8dddd}.refined-ok{color:#67e8a0!important}.refined-warn{color:#f5d36a!important}.refined-bad{color:#ff6259!important}
 .refined-center{position:relative;display:flex;align-items:center;justify-content:center;min-height:600px;overflow:hidden}.refined-grid{position:absolute;inset:0;background:linear-gradient(rgba(255,59,48,.018) 1px,transparent 1px),linear-gradient(90deg,rgba(255,59,48,.018) 1px,transparent 1px);background-size:36px 36px;mask-image:radial-gradient(circle,black,transparent 72%)}.refined-orb{width:min(34vw,390px);height:min(34vw,390px);min-width:280px;min-height:280px;border-radius:50%;position:relative;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle,rgba(255,59,48,.08) 0 18%,transparent 19%),repeating-radial-gradient(circle,transparent 0 38px,rgba(255,59,48,.12) 39px 40px);border:1px solid rgba(255,59,48,.28);box-shadow:0 0 70px rgba(255,59,48,.08),inset 0 0 50px rgba(255,59,48,.06)}.refined-orb:before{content:"";position:absolute;inset:9%;border:1px dashed rgba(255,59,48,.25);border-radius:50%}.refined-orb:after{content:"";position:absolute;width:1px;height:90%;background:linear-gradient(transparent,#ff3b30,transparent);transform:rotate(35deg);box-shadow:0 0 11px #ff3b30;opacity:.6}.refined-ring{position:absolute;border:1px solid rgba(255,98,89,.18);border-radius:50%}.refined-ring.r1{width:72%;height:72%}.refined-ring.r2{width:52%;height:52%;border-color:rgba(255,59,48,.26)}.refined-ring.r3{width:88%;height:88%;border-style:dashed}.refined-core{width:112px;height:112px;border-radius:50%;background:radial-gradient(circle,#190908,#030405 70%);border:1px solid rgba(255,59,48,.55);box-shadow:0 0 30px rgba(255,59,48,.18),inset 0 0 25px rgba(255,59,48,.1);z-index:3;display:flex;flex-direction:column;align-items:center;justify-content:center}.refined-core strong{font-size:2.15rem;color:#f4e8e8}.refined-core span{color:#ff6259;font-size:.48rem;letter-spacing:.2em}.refined-caption{position:absolute;bottom:9%;color:#5e5555;font:500 .5rem monospace;letter-spacing:.14em}
-.refined-ai{border:1px solid rgba(255,59,48,.18);background:linear-gradient(180deg,rgba(13,9,10,.92),rgba(5,6,8,.95));border-radius:7px;padding:.8rem;min-height:250px}.refined-ai-head{display:flex;justify-content:space-between;color:#ff6259;font-size:.58rem;letter-spacing:.14em}.refined-ai-orb{width:76px;height:76px;margin:1.1rem auto .7rem;border-radius:50%;display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,59,48,.5);background:radial-gradient(circle,#32100e,#080607 70%);color:#ffb2ad;font-size:1.5rem;font-weight:800;box-shadow:0 0 28px rgba(255,59,48,.15)}.refined-ai-status{text-align:center;color:#e7dddd;font-size:.7rem}.refined-ai-action{text-align:center;color:#847a7a;font-size:.6rem;margin:.35rem 0 .8rem}.refined-loop{display:flex;align-items:center;justify-content:center;gap:.25rem;flex-wrap:wrap;color:#9d9191;font-size:.46rem;letter-spacing:.06em}.refined-loop span{border:1px solid rgba(255,59,48,.2);padding:.25rem .35rem}.refined-loop i{color:#ff6259;font-style:normal}.refined-feed-item{padding:.35rem 0;border-bottom:1px solid rgba(255,59,48,.07);font-size:.55rem;color:#706767}.refined-feed-item b{color:#cdbebe}.refined-feed-item em{font-style:normal;color:#ff6259;margin-left:.3rem}.refined-feed-item p{margin:.15rem 0 0;color:#847a7a}.hud-chatbox{border:1px solid rgba(255,59,48,.18);background:linear-gradient(180deg,rgba(13,9,10,.92),rgba(5,6,8,.95));border-radius:7px;padding:.65rem;margin-top:.65rem;max-height:235px;overflow-y:auto}.hud-msg{border-left:2px solid rgba(255,59,48,.35);padding:.28rem .45rem;margin:.28rem 0;background:rgba(255,59,48,.025)}.hud-msg span{font-size:.48rem;letter-spacing:.13em;color:#ff6259}.hud-msg p{margin:.16rem 0 0;color:#bdb1b1;font-size:.61rem;line-height:1.35;white-space:pre-wrap;word-break:break-word}.hud-msg-user{border-left-color:rgba(255,98,89,.55)}.hud-msg-ai{border-left-color:rgba(103,232,160,.45)}.hud-msg-ai span{color:#67e8a0}.hud-empty-chat{color:#625a5a;font-size:.58rem;padding:.55rem 0}.hud-chatbox ~ div .stTextInput input{background:#08090b!important;border:1px solid rgba(255,59,48,.22)!important;color:#eee!important;font-size:.65rem!important}.hud-chatbox ~ div button{min-height:34px!important;font-size:.55rem!important;letter-spacing:.12em!important}
+.refined-ai{border:1px solid rgba(255,59,48,.18);background:linear-gradient(180deg,rgba(13,9,10,.92),rgba(5,6,8,.95));border-radius:7px;padding:.8rem;min-height:250px}.refined-ai-head{display:flex;justify-content:space-between;color:#ff6259;font-size:.58rem;letter-spacing:.14em}.refined-ai-orb{width:76px;height:76px;margin:1.1rem auto .7rem;border-radius:50%;display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,59,48,.5);background:radial-gradient(circle,#32100e,#080607 70%);color:#ffb2ad;font-size:1.5rem;font-weight:800;box-shadow:0 0 28px rgba(255,59,48,.15)}.refined-ai-status{text-align:center;color:#e7dddd;font-size:.7rem}.refined-ai-action{text-align:center;color:#847a7a;font-size:.6rem;margin:.35rem 0 .8rem}.refined-loop{display:flex;align-items:center;justify-content:center;gap:.25rem;flex-wrap:wrap;color:#9d9191;font-size:.46rem;letter-spacing:.06em}.refined-loop span{border:1px solid rgba(255,59,48,.2);padding:.25rem .35rem}.refined-loop i{color:#ff6259;font-style:normal}.refined-feed-item{padding:.35rem 0;border-bottom:1px solid rgba(255,59,48,.07);font-size:.55rem;color:#706767}.refined-feed-item b{color:#cdbebe}.refined-feed-item em{font-style:normal;color:#ff6259;margin-left:.3rem}.refined-feed-item p{margin:.15rem 0 0;color:#847a7a}.hud-chatbox-scroll{max-height:360px;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:#6e1715 #08090b}.hud-chatbox-scroll::-webkit-scrollbar{width:6px}.hud-chatbox-scroll::-webkit-scrollbar-track{background:#08090b}.hud-chatbox-scroll::-webkit-scrollbar-thumb{background:#6e1715;border-radius:6px}
+.hud-chatbox{border:1px solid rgba(255,59,48,.18);background:linear-gradient(180deg,rgba(13,9,10,.92),rgba(5,6,8,.95));border-radius:7px;padding:.65rem;margin-top:.65rem;max-height:235px;overflow-y:auto}.hud-msg{border-left:2px solid rgba(255,59,48,.35);padding:.28rem .45rem;margin:.28rem 0;background:rgba(255,59,48,.025)}.hud-msg span{font-size:.48rem;letter-spacing:.13em;color:#ff6259}.hud-msg p{margin:.16rem 0 0;color:#bdb1b1;font-size:.61rem;line-height:1.35;white-space:pre-wrap;word-break:break-word}.hud-msg-user{border-left-color:rgba(255,98,89,.55)}.hud-msg-ai{border-left-color:rgba(103,232,160,.45)}.hud-msg-ai span{color:#67e8a0}.hud-empty-chat{color:#625a5a;font-size:.58rem;padding:.55rem 0}.hud-chatbox ~ div .stTextInput input{background:#08090b!important;border:1px solid rgba(255,59,48,.22)!important;color:#eee!important;font-size:.65rem!important}.hud-chatbox ~ div button{min-height:34px!important;font-size:.55rem!important;letter-spacing:.12em!important}
 @media(max-width:1000px){.refined-center{min-height:430px}.refined-orb{width:300px;height:300px}}
 </style>
 
@@ -961,7 +962,7 @@ with tabs[14]:
         st.info('Regra V12.9: baixo risco pode executar automaticamente; médio/alto risco entra na fila de aprovação; ações bloqueadas continuam bloqueadas. O Laboratório Noturno pode analisar segurança, mas não recebe permissão para aplicar mudanças sozinho.')
 
 
-# V13.3.3 — Refined HUD + Chat
+# V13.3.4 — Refined HUD + Chat
 with tabs[0]:
     try: _agent = get_agent_status()
     except Exception: _agent = {'ok':False,'online':False,'info':{}}
@@ -979,7 +980,7 @@ with tabs[0]:
     _online_devices=[d for d in _devices if d.get('status')=='online']; _info=_agent.get('info') or {}; _online=bool(_agent.get('online')); _pending=int(_sec.get('pending',0) or 0); _kill=bool(_sec.get('kill_switch'))
     _current=_live.get('current') or {}; _cur_status=str(_current.get('status','idle')).upper(); _cur_agent=str(_current.get('agent') or 'SYSTEM')[:24]; _cur_action=str(_current.get('instruction') or _current.get('result') or 'Aguardando uma missão...')[:100]; _dur=_current.get('duration_ms'); _dur_text=f'{float(_dur)/1000:.1f}s' if isinstance(_dur,(int,float)) else '--'
 
-    st.markdown('<div class="refined-top"><div class="refined-brand"><i>J</i>ARVIS // COMMAND OS</div><div class="refined-sub">CORE • AGENT LOOP • TOOLS • LIVE OPERATIONS</div><div class="refined-system"><b>●</b> SYSTEM ONLINE • V13.3.3</div></div>',unsafe_allow_html=True)
+    st.markdown('<div class="refined-top"><div class="refined-brand"><i>J</i>ARVIS // COMMAND OS</div><div class="refined-sub">CORE • AGENT LOOP • TOOLS • LIVE OPERATIONS</div><div class="refined-system"><b>●</b> SYSTEM ONLINE • V13.3.4</div></div>',unsafe_allow_html=True)
     st.markdown('<div class="refined-dock">',unsafe_allow_html=True); d=st.columns([1,1,1,1,1,1,1,1.15])
     with d[0]:
         with st.popover('SYSTEM'):
@@ -1008,34 +1009,30 @@ with tabs[0]:
             st.markdown('**MISSIONS**'); st.write(f"Running: **{len(_running)}**"); st.write(f"Done: **{len(_done)}**"); st.write(f"Failed: **{len(_failed)}**")
     st.markdown('</div>',unsafe_allow_html=True)
 
-    left,center,right=st.columns([.78,1.65,1.0],gap='small')
+    # V13.3.4 — AI panel moved to the left; chat uses a fixed-height scroll viewport.
+    left,center,right=st.columns([1.0,1.55,1.18],gap='small')
     with left:
+        st.markdown(f'''<div class="refined-ai"><div class="refined-ai-head"><span>JARVIS AI</span><span>AGENT LOOP • TOOLS</span></div><div class="refined-ai-orb">J</div><div class="refined-ai-status"><b>{_cur_agent}</b> • {_cur_status}</div><div class="refined-ai-action">{_cur_action}</div><div class="refined-loop"><span>PLANNER</span><i>→</i><span>AGENT</span><i>→</i><span>TOOLS</span><i>→</i><span>VERIFY</span></div></div>''',unsafe_allow_html=True)
         st.markdown(f'''<div class="refined-card"><div class="refined-title">SYSTEM STATUS</div><div class="refined-row"><span>CORE</span><b class="refined-ok">ONLINE</b></div><div class="refined-row"><span>LOCAL AGENT</span><b class="{'refined-ok' if _online else 'refined-bad'}">{'ONLINE' if _online else 'OFFLINE'}</b></div><div class="refined-row"><span>SECURITY</span><b class="{'refined-bad' if _kill else 'refined-ok'}">{'LOCKED' if _kill else 'ACTIVE'}</b></div><div class="refined-row"><span>APPROVALS</span><b class="refined-warn">{_pending:02d}</b></div></div>''',unsafe_allow_html=True)
         st.markdown(f'''<div class="refined-card"><div class="refined-title">TELEMETRY</div><div class="refined-row"><span>CPU</span><b>{_info.get('cpu_percent','—')}%</b></div><div class="refined-row"><span>RAM</span><b>{_info.get('ram_em_uso_percent','—')}%</b></div><div class="refined-row"><span>DEVICES</span><b>{len(_online_devices)}/{len(_devices)}</b></div><div class="refined-row"><span>EVENTS</span><b>{len(_events):04d}</b></div></div>''',unsafe_allow_html=True)
-        st.markdown(f'''<div class="refined-card"><div class="refined-title">CURRENT OPERATION</div><div class="refined-row"><span>AGENT</span><b>{_cur_agent}</b></div><div class="refined-row"><span>STATUS</span><b class="refined-warn">{_cur_status}</b></div><div class="refined-row"><span>DURATION</span><b>{_dur_text}</b></div><div style="color:#766b6b;font-size:.57rem;margin-top:.5rem;line-height:1.4">{_cur_action}</div></div>''',unsafe_allow_html=True)
     with center:
-        st.markdown(f'''<div class="refined-center"><div class="refined-grid"></div><div class="refined-orb"><div class="refined-ring r3"></div><div class="refined-ring r1"></div><div class="refined-ring r2"></div><div class="refined-core"><strong>{len(_running):02d}</strong><span>ACTIVE</span></div></div><div class="refined-caption">JARVIS CORE • {len(_running):02d} ACTIVE MISSIONS • V13.3.3</div></div>''',unsafe_allow_html=True)
+        st.markdown(f'''<div class="refined-center"><div class="refined-grid"></div><div class="refined-orb"><div class="refined-ring r3"></div><div class="refined-ring r1"></div><div class="refined-ring r2"></div><div class="refined-core"><strong>{len(_running):02d}</strong><span>ACTIVE</span></div></div><div class="refined-caption">JARVIS CORE • {len(_running):02d} ACTIVE MISSIONS • V13.3.4</div></div>''',unsafe_allow_html=True)
+        st.markdown(f'''<div class="refined-card"><div class="refined-title">CURRENT OPERATION</div><div class="refined-row"><span>AGENT</span><b>{_cur_agent}</b></div><div class="refined-row"><span>STATUS</span><b class="refined-warn">{_cur_status}</b></div><div class="refined-row"><span>DURATION</span><b>{_dur_text}</b></div><div style="color:#766b6b;font-size:.57rem;margin-top:.5rem;line-height:1.4">{_cur_action}</div></div>''',unsafe_allow_html=True)
     with right:
-        st.markdown(f'''<div class="refined-ai"><div class="refined-ai-head"><span>JARVIS AI</span><span>AGENT LOOP • TOOLS</span></div><div class="refined-ai-orb">J</div><div class="refined-ai-status"><b>{_cur_agent}</b> • {_cur_status}</div><div class="refined-ai-action">{_cur_action}</div><div class="refined-loop"><span>PLANNER</span><i>→</i><span>AGENT</span><i>→</i><span>TOOLS</span><i>→</i><span>VERIFY</span></div></div>''',unsafe_allow_html=True)
-        st.markdown('<div class="refined-card"><div class="refined-title">LIVE OPERATIONS</div>',unsafe_allow_html=True)
-        for x in (_live.get('recent') or [])[:4]: st.markdown(f'''<div class="refined-feed-item"><b>{str(x.get('started_at',''))[11:19] or '--:--:--'}</b> {str(x.get('agent') or 'SYSTEM')[:15]} <em>{str(x.get('status',''))[:9].upper()}</em><p>{str(x.get('instruction') or x.get('result') or '')[:80]}</p></div>''',unsafe_allow_html=True)
-        if not (_live.get('recent') or []): st.caption('Aguardando operações...')
-        st.markdown('</div>',unsafe_allow_html=True)
-
-        # V13.3.3 — chat real dentro da HUD
         if 'hud_ai_history' not in st.session_state:
             st.session_state.hud_ai_history=[]
-        st.markdown('<div class=\"hud-chatbox\"><div class=\"refined-title\">JARVIS AI / CHAT</div>',unsafe_allow_html=True)
+        # Fixed viewport: the complete conversation remains stored, older messages are reached by scrolling.
+        st.markdown('<div class="hud-chatbox hud-chatbox-scroll"><div class="refined-title">JARVIS AI / CHAT</div>',unsafe_allow_html=True)
         if st.session_state.hud_ai_history:
-            for item in st.session_state.hud_ai_history[-4:]:
-                q=str(item.get('q',''))[:180].replace('<','&lt;').replace('>','&gt;')
-                a=str(item.get('a',''))[:700].replace('<','&lt;').replace('>','&gt;')
-                st.markdown(f'<div class=\"hud-msg hud-msg-user\"><span>YOU</span><p>{q}</p></div>',unsafe_allow_html=True)
-                st.markdown(f'<div class=\"hud-msg hud-msg-ai\"><span>JARVIS</span><p>{a}</p></div>',unsafe_allow_html=True)
+            for item in st.session_state.hud_ai_history:
+                q=str(item.get('q',''))[:2000].replace('<','&lt;').replace('>','&gt;')
+                a=str(item.get('a',''))[:6000].replace('<','&lt;').replace('>','&gt;')
+                st.markdown(f'<div class="hud-msg hud-msg-user"><span>YOU</span><p>{q}</p></div>',unsafe_allow_html=True)
+                st.markdown(f'<div class="hud-msg hud-msg-ai"><span>JARVIS</span><p>{a}</p></div>',unsafe_allow_html=True)
         else:
-            st.markdown('<div class=\"hud-empty-chat\">Aguardando sua mensagem...</div>',unsafe_allow_html=True)
+            st.markdown('<div class="hud-empty-chat">Aguardando sua mensagem...</div>',unsafe_allow_html=True)
         st.markdown('</div>',unsafe_allow_html=True)
-        with st.form('hud_chat_form_v133', clear_on_submit=True):
+        with st.form('hud_chat_form_v134', clear_on_submit=True):
             ai_prompt=st.text_input('Mensagem',placeholder='Digite uma mensagem para o Jarvis...',label_visibility='collapsed')
             csend, cvoice=st.columns([4,1])
             send=csend.form_submit_button('ENVIAR',use_container_width=True,type='primary')
@@ -1045,13 +1042,19 @@ with tabs[0]:
                 tool,tool_result=execute_tool(ai_prompt.strip())
                 memory_context=honcho_context(ai_prompt.strip())
                 answer=ask_llm(ai_prompt.strip(),tool_result,memory_context)
-                st.session_state.hud_ai_history=st.session_state.get('hud_ai_history',[])[-7:]+[{'q':ai_prompt.strip(),'a':answer}]
+                # Do not truncate history. Only the visual viewport is limited.
+                st.session_state.hud_ai_history=st.session_state.get('hud_ai_history',[])+[{'q':ai_prompt.strip(),'a':answer}]
                 honcho_save_turn(ai_prompt.strip(),answer)
                 if voice_send:
                     speak(answer)
                 st.rerun()
             except Exception as e:
                 st.error(f'Erro no Jarvis: {e}')
+        st.markdown('<div class="refined-card"><div class="refined-title">LIVE OPERATIONS</div>',unsafe_allow_html=True)
+        for x in (_live.get('recent') or [])[:4]: st.markdown(f'''<div class="refined-feed-item"><b>{str(x.get('started_at',''))[11:19] or '--:--:--'}</b> {str(x.get('agent') or 'SYSTEM')[:15]} <em>{str(x.get('status',''))[:9].upper()}</em><p>{str(x.get('instruction') or x.get('result') or '')[:80]}</p></div>''',unsafe_allow_html=True)
+        if not (_live.get('recent') or []): st.caption('Aguardando operações...')
+        st.markdown('</div>',unsafe_allow_html=True)
+
     st.markdown(f'''<div class="hud-bottom"><span>CORE ONLINE</span><span>{len(_missions):04d} MISSIONS</span><span>{len(SKILLS):02d} SKILLS</span><span>{len(_events):04d} EVENTS</span><span>PERMISSION MANAGER ENFORCED</span></div>''',unsafe_allow_html=True)
 
 # V13.2 — Agent Map
