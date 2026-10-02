@@ -5,7 +5,7 @@ from fastapi.responses import PlainTextResponse
 
 import whatsapp, core, voice_io, store, security, orchestrator, devices, live_operations
 
-VERSION='14.5.2'
+VERSION='14.5.3'
 app=FastAPI(title='Jarvis Gateway',version=VERSION)
 LOCAL_AGENT_TOKEN=os.getenv('LOCAL_AGENT_TOKEN','')
 COMMANDS=[]
@@ -41,7 +41,7 @@ def health():
         'local_agent_configured': bool(LOCAL_AGENT_TOKEN),
         'queued_commands': len(COMMANDS),
         'core_integrated': True,
-        'build': '14.5.2-quality-gate',
+        'build': '14.5.3-command-reliability',
     }
 
 @app.get('/system/status')

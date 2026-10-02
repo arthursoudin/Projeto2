@@ -13,8 +13,8 @@ try:
 except Exception:
     requests = None; BeautifulSoup = None
 
-APP_VERSION=os.getenv('JARVIS_APP_VERSION','14.5.2')
-BUILD_TAG='quality-gate'
+APP_VERSION=os.getenv('JARVIS_APP_VERSION','14.5.3')
+BUILD_TAG='command-reliability'
 MODEL=os.getenv('OPENROUTER_MODEL','openai/gpt-oss-120b')
 API_KEY=os.getenv('OPENROUTER_API_KEY')
 HONCHO_API_KEY=os.getenv('HONCHO_API_KEY')
@@ -377,24 +377,50 @@ def is_devices_intent(text):
     return any(p in n for p in patterns)
 
 def connected_devices_fast():
+    """Consulta dispositivos sem LLM e usa o heartbeat vivo como fonte de verdade.
+    O catálogo persistido pode conter PCs antigos; o heartbeat atual deve prevalecer.
+    """
     if not GATEWAY_URL or not LOCAL_AGENT_TOKEN:
         return {'ok':False,'error':'Gateway/Local Agent não configurados.'}
+    headers={'X-Agent-Token':LOCAL_AGENT_TOKEN}
     try:
-        r=requests.get(f'{GATEWAY_URL}/devices',headers={'X-Agent-Token':LOCAL_AGENT_TOKEN},timeout=6)
-        r.raise_for_status()
-        data=r.json()
+        live=requests.get(f'{GATEWAY_URL}/agent/status',headers=headers,timeout=4)
+        live.raise_for_status(); live_data=live.json()
+        r=requests.get(f'{GATEWAY_URL}/devices',headers=headers,timeout=4)
+        r.raise_for_status(); data=r.json()
         rows=data.get('devices') or []
-        if not rows: return {'ok':True,'devices':[],'message':'Nenhum computador autorizado está conectado.'}
-        out=[]
-        for d in rows:
-            out.append({
-                'name':d.get('name') or d.get('id') or 'PC',
-                'status':d.get('status','unknown'),
-                'version':d.get('version','?'),
-                'last_seen':d.get('last_seen'),
-                'applications':d.get('application_count',0),
-            })
-        return {'ok':True,'devices':out}
+        agent_online=bool(live_data.get('online'))
+        info=live_data.get('info') or {}
+        live_name=info.get('computer') or 'PC local'
+        live_version=info.get('version') or '?'
+        # Se o agente atual está vivo, garanta que a resposta não seja contradita por um
+        # registro persistido antigo/offline. Em multi-PC, os demais continuam vindo do catálogo.
+        if agent_online:
+            live_id=None
+            for d in rows:
+                if d.get('name') == live_name and d.get('status') == 'online':
+                    live_id=d.get('id'); break
+            out=[]
+            for d in rows:
+                item={
+                    'name':d.get('name') or d.get('id') or 'PC',
+                    'status':d.get('status','unknown'),
+                    'version':d.get('version','?'),
+                    'last_seen':d.get('last_seen'),
+                    'applications':d.get('application_count',0),
+                }
+                if d.get('name') == live_name:
+                    item.update({'status':'online','version':live_version,'live':True})
+                out.append(item)
+            if not any(x.get('live') for x in out):
+                out.insert(0, {'name':live_name,'status':'online','version':live_version,
+                               'last_seen':'agora','applications':info.get('application_count',0),'live':True})
+            return {'ok':True,'devices':out,'live_agent':True}
+        out=[{'name':d.get('name') or d.get('id') or 'PC','status':d.get('status','unknown'),
+              'version':d.get('version','?'),'last_seen':d.get('last_seen'),
+              'applications':d.get('application_count',0),'live':False} for d in rows]
+        return {'ok':True,'devices':out,'live_agent':False,
+                'message':'Nenhum Local Agent está respondendo agora.' if not out else None}
     except Exception as e:
         return {'ok':False,'error':f'Não consegui consultar os computadores conectados: {type(e).__name__}: {e}'}
 

@@ -1,4 +1,4 @@
-"""Jarvis V14.5.2 Quality Gate.
+"""Jarvis V14.5.3 Quality Gate.
 Run: python quality_gate.py
 This deliberately tests several layers without contacting OpenRouter or requiring Streamlit.
 """
@@ -61,11 +61,11 @@ check('No unicodeode typo', lambda: 'unicodeode' not in app)
 check('PC parser before LLM', lambda: app.index('steps=parse_pc_commands(prompt)') < app.index('ask_llm(prompt,result,context)'))
 check('Fast PC response bypasses LLM', lambda: "elif tool == 'computer':" in app and 'format_pc_fast(result)' in app)
 check('Device query fast path exists', lambda: 'is_devices_intent' in app and 'connected_devices_fast' in app)
-check('Build fingerprint exists', lambda: '14.5.2-quality-gate' in text('gateway.py') and "APP_VERSION=os.getenv('JARVIS_APP_VERSION','14.5.2')" in app)
+check('Build fingerprint exists', lambda: '14.5.3-command-reliability' in text('gateway.py') and "APP_VERSION=os.getenv('JARVIS_APP_VERSION','14.5.3')" in app)
 
 # 5) version consistency
 for rel in ['gateway.py','local_agent/agent.py','orchestrator.py']:
-    check(f'Version 14.5.2 in {rel}', lambda rel=rel: '14.5.2' in text(rel))
+    check(f'Version 14.5.3 in {rel}', lambda rel=rel: '14.5.3' in text(rel))
 
 # 6) security invariants
 sec=text('security.py'); gw=text('gateway.py')
@@ -73,6 +73,15 @@ check('Delete remains high risk', lambda: "'delete_path':'high'" in sec)
 check('Kill switch exists', lambda: "'kill_switch'" in sec and 'kill_switch' in gw)
 check('Arbitrary shell absent from PC actions', lambda: 'shell=True' not in text('pc_control.py') and 'subprocess.call' not in text('pc_control.py'))
 check('Allowed action list exists', lambda: 'ALLOWED_ACTIONS=' in gw and 'open_app' in gw)
+
+
+# 8) Local-agent integration invariants: the UI parser and PC agent must agree on Chrome.
+agent=text('local_agent/agent.py')
+check('Chrome is allowed by Local Agent', lambda: '"chrome": {"label": "Google Chrome"' in agent and 'open_app' in agent)
+check('Local Agent reports current build', lambda: 'VERSION = "14.5.3"' in agent)
+check('Chrome lookup uses known install locations', lambda: 'Google\\Chrome\\Application' in agent or 'Google/Chrome/Application' in agent)
+check('Fast device route uses live agent status', lambda: 'agent/status' in app and "live_agent" in app)
+check('No generic LLM fallback for computer result', lambda: "elif tool == 'computer':" in app and 'format_pc_fast(result)' in app)
 
 # 7) repeat parser stress loop
 stress=['abra chrome','abra o chrome','abrir chrome','abre chrome','abra o VS Code','mostre as informações do meu PC','crie uma pasta chamada TesteJarvis']*100

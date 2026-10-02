@@ -33,3 +33,10 @@ PDF, DOCX, XLSX/XLS, CSV, TXT, MD, JSON, HTML/XML, RTF, PPTX/PPT, PNG/JPG/JPEG/W
 - Voz fica desligada por padrão para não atrasar a resposta; pode ativar no painel Voz ou usar `JARVIS_VOICE_DEFAULT=1`.
 - `OPENROUTER_MAX_TOKENS` controla o tamanho máximo das respostas (padrão 600).
 - Estado compartilhado é atualizado no máximo a cada 8 segundos para reduzir leituras de rede.
+
+
+## V14.5.3 — Command Reliability
+- Build fingerprint: `14.5.3-command-reliability`.
+- Chrome/Edge launch definitions are part of the Local Agent contract.
+- Live heartbeat is authoritative for the fast "computadores conectados" query; stale persisted devices no longer override a live agent.
+- After deployment, restart `local_agent/start_agent.bat` so the PC agent reports V14.5.3.

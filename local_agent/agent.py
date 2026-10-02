@@ -25,7 +25,7 @@ from urllib.parse import quote_plus, urlparse
 
 import requests
 
-VERSION = "14.5.2"
+VERSION = "14.5.3"
 BASE_DIR = pathlib.Path(__file__).resolve().parent
 CONFIG_FILE = BASE_DIR / "config.json"
 
@@ -209,6 +209,23 @@ def _find_app_exe(candidates):
         os.environ.get("PROGRAMFILES(X86)", ""),
     ]
     # Procuramos somente em diretórios de instalação conhecidos; sem varrer o disco inteiro.
+    known = []
+    la=os.environ.get('LOCALAPPDATA','')
+    pf=os.environ.get('PROGRAMFILES','')
+    pfx=os.environ.get('PROGRAMFILES(X86)','')
+    known += [os.path.join(la,'Google','Chrome','Application'),
+              os.path.join(pf,'Google','Chrome','Application'),
+              os.path.join(pfx,'Google','Chrome','Application'),
+              os.path.join(la,'Microsoft','Edge','Application'),
+              os.path.join(pf,'Microsoft','Edge','Application'),
+              os.path.join(pfx,'Microsoft','Edge','Application')]
+    for base in known:
+        if not os.path.isdir(base):
+            continue
+        for name in candidates or []:
+            direct=os.path.join(base,name)
+            if os.path.isfile(direct):
+                return direct
     for root in [r for r in roots if r]:
         for rel in ("Google/Chrome/Application", "Microsoft/Edge/Application", "DBeaver", "JetBrains", "PostgreSQL", "Obsidian"):
             base = os.path.join(root, rel)
@@ -248,7 +265,8 @@ def open_app(app):
             if app in item.get('aliases', []):
                 spec = item; app = key; break
     if not spec:
-        return _err("Aplicativo não permitido: %s. Use list_apps para consultar os permitidos." % app)
+        allowed=', '.join(APP_DEFINITIONS.keys())
+        return _err(f"Aplicativo não permitido: {app}. Permitidos nesta versão: {allowed}. Agente V{VERSION}.")
     try:
         kind, target = spec['kind'], spec['target']
         if kind == 'vscode':
