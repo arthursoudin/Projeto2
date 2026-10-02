@@ -300,6 +300,61 @@ def run_pc_plan(steps, confirmed=False):
         if not r.get('ok'): return done,'error'
     return done,'ok'
 
+def format_pc_response(result):
+    """Resposta determinística para ações do PC. Nunca deixa o LLM inventar dados."""
+    if isinstance(result, str):
+        return result
+    try:
+        data = json.loads(result) if isinstance(result, str) else result
+    except Exception:
+        return f"Resultado do agente local: {result}"
+    if not isinstance(data, dict):
+        return f"Resultado do agente local: {data}"
+
+    status = data.get('status')
+    if status == 'confirm':
+        return "⚠️ A ação requer confirmação. Nada foi executado ainda."
+    if 'confirmado' in data and data.get('confirmado') is True:
+        acoes = data.get('acoes') or []
+    else:
+        acoes = data.get('acoes') or []
+
+    if not acoes:
+        if data.get('ok') is False:
+            return f"❌ {data.get('error', 'O agente local retornou um erro sem detalhes.')}"
+        return "O agente local não retornou dados de execução."
+
+    lines = []
+    for item in acoes:
+        if not isinstance(item, dict):
+            lines.append(str(item)); continue
+        acao = item.get('acao', 'ação')
+        ok = item.get('ok')
+        resultado = item.get('resultado')
+        if ok is True:
+            if isinstance(resultado, dict):
+                # system_info: mostrar SOMENTE campos realmente devolvidos pelo agente.
+                if acao.startswith('system_info') or 'cpu_uso_percent' in resultado:
+                    labels = [
+                        ('computer','Computador'), ('os','Sistema'), ('processor','Processador'),
+                        ('cpu_uso_percent','CPU'), ('cpu_nucleos_fisicos','Núcleos físicos'),
+                        ('cpu_threads_logicos','Threads'), ('ram_total_gb','RAM total (GB)'),
+                        ('ram_livre_gb','RAM livre (GB)'), ('ram_em_uso_percent','RAM em uso'),
+                        ('disco','Disco'), ('disco_total_gb','Disco total (GB)'),
+                        ('disco_livre_gb','Disco livre (GB)'), ('ligado_ha','Ligado há'),
+                        ('python','Python'), ('home','Diretório do usuário'), ('jarvis_folder','Pasta Jarvis')
+                    ]
+                    vals = [f"- **{label}:** {resultado[key]}" for key,label in labels if key in resultado]
+                    lines.append("**Informações reais retornadas pelo PC:**\n" + ("\n".join(vals) if vals else "- O agente não retornou métricas detalhadas."))
+                else:
+                    msg = resultado.get('message')
+                    lines.append(f"✅ {msg or resultado}")
+            else:
+                lines.append(f"✅ {resultado or 'Ação concluída.'}")
+        else:
+            lines.append(f"❌ **{acao}:** {resultado or 'ação não executada.'}")
+    return "\n\n".join(lines)
+
 def save_memory_item(key,value):
     st.session_state.memory[str(key)]=str(value)
     save_json(MEMORY_FILE,st.session_state.memory)
@@ -376,7 +431,13 @@ with tabs[0]:
         st.session_state.last_action={'skills':skills,'tool':tool,'result':result,'session_id':st.session_state.session_id}
         with st.chat_message('assistant'):
             try:
-                answer=ask_llm(prompt,result,context)+confirm_note; st.markdown(answer); st.session_state.messages.append({'role':'assistant','content':answer}); honcho_save_turn(prompt,answer)
+                # Ações do PC usam resposta determinística. O LLM não pode reescrever
+                # métricas do computador, porque isso permitiria alucinar hardware/dados.
+                if tool == 'computer':
+                    answer = format_pc_response(result) + confirm_note
+                else:
+                    answer = ask_llm(prompt,result,context) + confirm_note
+                st.markdown(answer); st.session_state.messages.append({'role':'assistant','content':answer}); honcho_save_turn(prompt,answer)
                 try: asyncio.run(make_audio(answer,'/tmp/jarvis_v10.mp3')); st.audio('/tmp/jarvis_v10.mp3',format='audio/mp3',autoplay=True)
                 except Exception as e: st.caption(f'Áudio indisponível: {e}')
             except Exception as e: st.error(f'Erro no Jarvis: {e}')
