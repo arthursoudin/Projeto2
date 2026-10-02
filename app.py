@@ -429,8 +429,24 @@ section[data-testid="stSidebar"] { background:#02080d; border-right:1px solid va
 button[kind="secondary"]{border-color:rgba(255,59,48,.18)!important}button[kind="secondary"]:hover{border-color:rgba(255,59,48,.55)!important;color:#ff8b84!important}
 @media (max-width:900px){.hud-center-sphere-wrap{order:2}.hud-ai-title{margin-top:.4rem}.hud-sphere{width:280px;height:280px}}
 </style>
+<style>
+[data-testid="stSidebar"]{display:none!important}
+[data-testid="stHeader"]{display:none!important}
+[data-testid="stToolbar"]{display:none!important}
+.block-container{max-width:1500px!important;padding:.55rem .8rem .4rem!important}
+[data-testid="stAppViewContainer"],body{background:#030506!important}
+.stTabs [data-baseweb="tab-list"]{display:none!important}.stTabs [data-baseweb="tab-panel"]{padding:0!important}
+.main h1{display:none!important}
+.refined-top{height:48px;display:flex;align-items:center;gap:1rem;padding:0 .9rem;border:1px solid rgba(255,59,48,.24);background:linear-gradient(180deg,#0a0b0d,#050607);box-shadow:0 0 28px rgba(255,59,48,.06);margin-bottom:.45rem}
+.refined-brand{font-weight:800;letter-spacing:.22em;color:#f7eded;font-size:1rem;white-space:nowrap}.refined-brand i{font-style:normal;color:#ff3b30}.refined-system{margin-left:auto;color:#8c8a8a;font:600 .58rem monospace;letter-spacing:.12em}.refined-system b{color:#67e8a0}.refined-sub{color:#514c4c;font:.48rem monospace;letter-spacing:.12em;white-space:nowrap}
+.refined-dock .stPopover>button{min-height:32px!important;height:32px!important;padding:.15rem .5rem!important;background:#07090a!important;border:1px solid rgba(255,59,48,.18)!important;color:#a99f9f!important;font-size:.55rem!important;letter-spacing:.11em!important}.refined-dock .stPopover>button:hover{border-color:rgba(255,59,48,.55)!important;color:#ff8179!important}
+.refined-card{border:1px solid rgba(255,59,48,.16);background:linear-gradient(180deg,rgba(13,9,10,.9),rgba(5,6,8,.94));border-radius:7px;padding:.72rem;margin-bottom:.65rem;box-shadow:inset 0 0 25px rgba(255,59,48,.018)}.refined-title{color:#ff5b52;font-size:.56rem;letter-spacing:.18em;text-transform:uppercase;margin-bottom:.5rem}.refined-row{display:flex;justify-content:space-between;padding:.34rem 0;border-bottom:1px solid rgba(255,59,48,.07);color:#6f6a6a;font-size:.63rem}.refined-row:last-child{border-bottom:0}.refined-row b{color:#e8dddd}.refined-ok{color:#67e8a0!important}.refined-warn{color:#f5d36a!important}.refined-bad{color:#ff6259!important}
+.refined-center{position:relative;display:flex;align-items:center;justify-content:center;min-height:600px;overflow:hidden}.refined-grid{position:absolute;inset:0;background:linear-gradient(rgba(255,59,48,.018) 1px,transparent 1px),linear-gradient(90deg,rgba(255,59,48,.018) 1px,transparent 1px);background-size:36px 36px;mask-image:radial-gradient(circle,black,transparent 72%)}.refined-orb{width:min(34vw,390px);height:min(34vw,390px);min-width:280px;min-height:280px;border-radius:50%;position:relative;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle,rgba(255,59,48,.08) 0 18%,transparent 19%),repeating-radial-gradient(circle,transparent 0 38px,rgba(255,59,48,.12) 39px 40px);border:1px solid rgba(255,59,48,.28);box-shadow:0 0 70px rgba(255,59,48,.08),inset 0 0 50px rgba(255,59,48,.06)}.refined-orb:before{content:"";position:absolute;inset:9%;border:1px dashed rgba(255,59,48,.25);border-radius:50%}.refined-orb:after{content:"";position:absolute;width:1px;height:90%;background:linear-gradient(transparent,#ff3b30,transparent);transform:rotate(35deg);box-shadow:0 0 11px #ff3b30;opacity:.6}.refined-ring{position:absolute;border:1px solid rgba(255,98,89,.18);border-radius:50%}.refined-ring.r1{width:72%;height:72%}.refined-ring.r2{width:52%;height:52%;border-color:rgba(255,59,48,.26)}.refined-ring.r3{width:88%;height:88%;border-style:dashed}.refined-core{width:112px;height:112px;border-radius:50%;background:radial-gradient(circle,#190908,#030405 70%);border:1px solid rgba(255,59,48,.55);box-shadow:0 0 30px rgba(255,59,48,.18),inset 0 0 25px rgba(255,59,48,.1);z-index:3;display:flex;flex-direction:column;align-items:center;justify-content:center}.refined-core strong{font-size:2.15rem;color:#f4e8e8}.refined-core span{color:#ff6259;font-size:.48rem;letter-spacing:.2em}.refined-caption{position:absolute;bottom:9%;color:#5e5555;font:500 .5rem monospace;letter-spacing:.14em}
+.refined-ai{border:1px solid rgba(255,59,48,.18);background:linear-gradient(180deg,rgba(13,9,10,.92),rgba(5,6,8,.95));border-radius:7px;padding:.8rem;min-height:250px}.refined-ai-head{display:flex;justify-content:space-between;color:#ff6259;font-size:.58rem;letter-spacing:.14em}.refined-ai-orb{width:76px;height:76px;margin:1.1rem auto .7rem;border-radius:50%;display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,59,48,.5);background:radial-gradient(circle,#32100e,#080607 70%);color:#ffb2ad;font-size:1.5rem;font-weight:800;box-shadow:0 0 28px rgba(255,59,48,.15)}.refined-ai-status{text-align:center;color:#e7dddd;font-size:.7rem}.refined-ai-action{text-align:center;color:#847a7a;font-size:.6rem;margin:.35rem 0 .8rem}.refined-loop{display:flex;align-items:center;justify-content:center;gap:.25rem;flex-wrap:wrap;color:#9d9191;font-size:.46rem;letter-spacing:.06em}.refined-loop span{border:1px solid rgba(255,59,48,.2);padding:.25rem .35rem}.refined-loop i{color:#ff6259;font-style:normal}.refined-feed-item{padding:.35rem 0;border-bottom:1px solid rgba(255,59,48,.07);font-size:.55rem;color:#706767}.refined-feed-item b{color:#cdbebe}.refined-feed-item em{font-style:normal;color:#ff6259;margin-left:.3rem}.refined-feed-item p{margin:.15rem 0 0;color:#847a7a}
+@media(max-width:1000px){.refined-center{min-height:430px}.refined-orb{width:300px;height:300px}}
+</style>
 
-<div class="jarvis-topbar"><div class="jarvis-brand"><span>J</span>ARVIS // COMMAND OS</div><div class="jarvis-nav"><b>CORE</b><span>AGENTS</span><span>DEVICES</span><span>MISSIONS</span><span>MEMORY</span><span>SECURITY</span></div><div class="jarvis-clock">SYSTEM ONLINE • V13.3.1</div></div>
+<div class="jarvis-topbar" style="display:none"><div class="jarvis-brand"><span>J</span>ARVIS // COMMAND OS</div><div class="jarvis-nav"><b>CORE</b><span>AGENTS</span><span>DEVICES</span><span>MISSIONS</span><span>MEMORY</span><span>SECURITY</span></div><div class="jarvis-clock">SYSTEM ONLINE • V13.3.1</div></div>
 ''', unsafe_allow_html=True)
 st.title('JARVIS // COMMAND OS'); st.caption('Central de comando • Agentes • Dispositivos • Missões • Memória • Segurança • Automação')
 with st.sidebar:
@@ -466,8 +482,8 @@ def save_overnight_config(cfg):
     except Exception as e:
         return {'ok':False,'error':f'Não foi possível salvar a configuração: {type(e).__name__}: {e}'}
 
-tabs=st.tabs(['Chat','Dashboard','Tarefas','Automações','Memória','Honcho','Skills','Sistema','WhatsApp','Agentes','Tools','Laboratório Noturno','Computer Agent','Segurança','Command Center','Agent Map'])
-with tabs[0]:
+tabs=st.tabs(['Command Center','Chat','Dashboard','Tarefas','Automações','Memória','Honcho','Skills','Sistema','WhatsApp','Agentes','Tools','Laboratório Noturno','Computer Agent','Segurança','Agent Map'])
+with tabs[1]:
     for m in st.session_state.messages:
         with st.chat_message(m['role']): st.markdown(m['content'])
     spoken_in=False
@@ -518,7 +534,7 @@ with tabs[0]:
                     try: speak(answer)
                     except Exception as e: st.caption(f'Áudio indisponível: {e}')
             except Exception as e: st.error(f'Erro no Jarvis: {e}')
-with tabs[1]:
+with tabs[2]:
     st.subheader('Dashboard')
     st.session_state.dash_since=dt.datetime.now().timestamp()   # toda ação do usuário reinicia o relógio de auto-atualização
     _frag=st.fragment(run_every=10) if hasattr(st,'fragment') else (lambda f: f)
@@ -583,7 +599,7 @@ with tabs[1]:
         if st.button('Ver log do agente local',key='dash_log'):
             lg=queue_pc_action('read_log',{'lines':15}); st.code('\n'.join(((lg.get('result') or {}).get('linhas')) or [])[-3000:] or (lg.get('error') or 'Log vazio.'))
     dashboard_panel()
-with tabs[2]:
+with tabs[3]:
     st.subheader('Gerenciador de tarefas')
     summary=task_summary(); c1,c2,c3,c4=st.columns(4); c1.metric('Total',summary['total']); c2.metric('Pendentes',summary['pendentes']); c3.metric('Atrasadas',summary['atrasadas']); c4.metric('Concluídas',summary['concluidas'])
     if st.button('Atualizar tarefas'): st.rerun()
@@ -600,7 +616,7 @@ with tabs[2]:
                 if cols[4].button('Concluir',key=f"done_{t['id']}"): complete_task(t['id']); st.rerun()
             else: cols[4].write('Concluída')
             if t.get('recurrence'): st.caption(f"Recorrência: {t['recurrence']} • Status: {task_status_text(t)}")
-with tabs[3]:
+with tabs[4]:
     st.subheader('Automações')
     st.caption('Rotinas rodam no seu PC pelo agente local, mesmo com o Render dormindo. Exemplos: "todo dia às 9h abra o vs code", "toda segunda e quarta às 8h abra a pasta Estudos", "daqui a 10 minutos abra a calculadora", "a cada 30 minutos abra o navegador".')
     st.markdown('**Rotinas no PC**')
@@ -626,15 +642,15 @@ with tabs[3]:
             status=task_status_text(t); label='Atrasada' if status=='atrasada' else 'Agendada' if t.get('due_at') else 'Sem horário'
             st.write(f"Tarefa #{t['id']} — {t['text']} — {label}")
     else: st.info('Nenhuma automação/tarefa pendente.')
-with tabs[4]:
-    st.subheader('Memória local de fallback'); st.json(st.session_state.memory) if st.session_state.memory else st.info('Nenhuma memória local salva.')
 with tabs[5]:
+    st.subheader('Memória local de fallback'); st.json(st.session_state.memory) if st.session_state.memory else st.info('Nenhuma memória local salva.')
+with tabs[6]:
     st.subheader('Memória Honcho'); st.write('Workspace:',HONCHO_WORKSPACE); st.write('Peer:',HONCHO_USER_ID); st.write('Sessão:',st.session_state.session_id); st.write('Status:',st.session_state.honcho_status)
     if st.button('Testar memória Honcho'):
         c=honcho_context('Quais informações importantes você tem sobre este usuário?'); st.session_state.honcho_context=c
         if c: st.success('Memória recuperada.'); st.code(c[:12000])
         else: st.warning('Não foi possível recuperar memória. Verifique HONCHO_API_KEY.')
-with tabs[6]:
+with tabs[7]:
     st.subheader('Skills 2.0')
     st.caption('Catálogo externo de habilidades. As descrições e palavras-chave ficam em skills/catalog.json para facilitar expansão sem mexer no núcleo.')
     c1,c2=st.columns(2); c1.metric('Skills carregadas',len(SKILLS)); c2.metric('Palavras-chave',sum(len(x.get('keywords',[])) for x in SKILLS.values()))
@@ -643,12 +659,12 @@ with tabs[6]:
             st.write(s.get('description',''))
             st.write('**Palavras-chave:**',', '.join(s.get('keywords',[])))
     st.info('Próxima evolução: skills executáveis poderão registrar ferramentas próprias, mantendo as permissões do Jarvis Core.')
-with tabs[7]:
+with tabs[8]:
     st.json(st.session_state.last_action or {'status':'Nenhuma ação executada'}); st.write('Voz:',VOICE); st.write('Modelo:',MODEL); st.write('Horário:',current_time()); st.write('Gateway:',GATEWAY_URL or 'não configurado'); st.write('Agente local:', 'configurado' if LOCAL_AGENT_TOKEN else 'não configurado')
     st.subheader('Permissões do PC'); st.table([{'Ação':a,'Nível':l} for a,l in PERMISSIONS.items()])
     if st.button('Ver log do agente local'): st.json(queue_pc_action('read_log',{'lines':25}))
     st.write('Transcrição de voz:',voice_io.status_text())
-with tabs[8]:
+with tabs[9]:
     st.subheader('WhatsApp (V12.1)')
     st.caption('O Jarvis responde no WhatsApp pelo gateway (Render). Só números da lista autorizada são atendidos, e só mensagens com assinatura válida da Meta.')
     if st.button('Verificar agora',key='wa_check_btn'): st.session_state.wa_check=get_agent_status()
@@ -670,7 +686,7 @@ with tabs[8]:
 4. No Render, no serviço do **gateway**, crie: `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN` (um texto qualquer que você inventar), `WHATSAPP_APP_SECRET`, `WHATSAPP_ALLOWED_NUMBERS` (seu número com DDI, ex.: 5511999998888). Para o Jarvis conversar, o gateway também precisa de `OPENROUTER_API_KEY`.
 5. Em *WhatsApp > Configuração > Webhook*, cole a URL acima e o mesmo `WHATSAPP_VERIFY_TOKEN`; inscreva-se no campo **messages**.
 6. Mande **/ajuda** para o número de teste. Para tarefas e memória aparecerem iguais aqui e no WhatsApp, use o **mesmo Supabase** nos dois serviços.''')
-with tabs[9]:
+with tabs[10]:
     st.subheader('Dashboard de Multiagentes (V12.7)')
     st.caption('Visão operacional da equipe: agentes disponíveis, execução recente, histórico, taxa de sucesso e etapas do Planejador.')
 
@@ -729,7 +745,7 @@ with tabs[9]:
 
 
 # V12.7 — laboratório noturno + configuração remota
-with tabs[11]:
+with tabs[12]:
     st.subheader('Laboratório Noturno')
     st.caption('Configure o loop diretamente pelo Render. O processo local lê esta configuração e executa os ciclos no seu PC.')
     cfg=get_overnight_config()
@@ -798,7 +814,7 @@ with tabs[11]:
         except Exception as e: st.error(f'Erro ao ler relatório: {e}')
     st.info('Você precisa deixar o processo local do laboratório iniciado uma vez no PC. Depois disso, horários, intervalo, ativação e limite de ciclos podem ser alterados por esta tela, sem voltar ao CMD.')
 
-with tabs[10]:
+with tabs[11]:
     st.subheader('Tools 2.0')
     st.caption('Catálogo central de ferramentas. A execução continua sujeita às permissões e aos agentes autorizados.')
     import tool_registry as _tr
@@ -820,7 +836,7 @@ with tabs[10]:
 
 
 # V12.8 — Computer Agent
-with tabs[12]:
+with tabs[13]:
     st.subheader('Computer Agent')
     st.caption('Planeja, executa e verifica sequências de ações seguras no seu PC. Ações destrutivas continuam bloqueadas.')
 
@@ -877,7 +893,7 @@ with tabs[12]:
 
 
 # V12.9 — Security & Permissions
-with tabs[13]:
+with tabs[14]:
     st.subheader('Security & Permissions')
     st.caption('Camada central que decide risco, aprovação, limites e auditoria antes das ações do Jarvis.')
     if not GATEWAY_URL or not LOCAL_AGENT_TOKEN:
@@ -945,8 +961,8 @@ with tabs[13]:
         st.info('Regra V12.9: baixo risco pode executar automaticamente; médio/alto risco entra na fila de aprovação; ações bloqueadas continuam bloqueadas. O Laboratório Noturno pode analisar segurança, mas não recebe permissão para aplicar mudanças sozinho.')
 
 
-# V13.3.1 — Compact Futuristic Command Center
-with tabs[14]:
+# V13.3.2 — Refined HUD Command Center
+with tabs[0]:
     try: _agent = get_agent_status()
     except Exception: _agent = {'ok':False,'online':False,'info':{}}
     try: _sec = get_security_status()
@@ -959,117 +975,59 @@ with tabs[14]:
     except Exception: _events = []
     try: _live = live_operations.snapshot(limit=8)
     except Exception: _live = {'current':None,'running':[],'recent':[],'event_count':len(_events)}
+    _running=[m for m in _missions if m.get('status')=='running']; _done=[m for m in _missions if m.get('status') in ('done','completed','success')]; _failed=[m for m in _missions if m.get('status')=='failed']
+    _online_devices=[d for d in _devices if d.get('status')=='online']; _info=_agent.get('info') or {}; _online=bool(_agent.get('online')); _pending=int(_sec.get('pending',0) or 0); _kill=bool(_sec.get('kill_switch'))
+    _current=_live.get('current') or {}; _cur_status=str(_current.get('status','idle')).upper(); _cur_agent=str(_current.get('agent') or 'SYSTEM')[:24]; _cur_action=str(_current.get('instruction') or _current.get('result') or 'Aguardando uma missão...')[:100]; _dur=_current.get('duration_ms'); _dur_text=f'{float(_dur)/1000:.1f}s' if isinstance(_dur,(int,float)) else '--'
 
-    _running=[m for m in _missions if m.get('status')=='running']
-    _failed=[m for m in _missions if m.get('status')=='failed']
-    _done=[m for m in _missions if m.get('status') in ('done','completed','success')]
-    _online_devices=[d for d in _devices if d.get('status')=='online']
-    _info=_agent.get('info') or {}
-    _online=bool(_agent.get('online'))
-    _pending=int(_sec.get('pending',0) or 0)
-    _kill=bool(_sec.get('kill_switch'))
-    _current=_live.get('current') or {}
-    _cur_status=str(_current.get('status','idle')).upper()
-    _cur_agent=str(_current.get('agent') or 'SYSTEM')[:24]
-    _cur_action=str(_current.get('instruction') or _current.get('result') or 'Aguardando uma missão...')[:100]
-    _cur_dur=_current.get('duration_ms')
-    _dur_text=f'{float(_cur_dur)/1000:.1f}s' if isinstance(_cur_dur,(int,float)) else '--'
-
-    # Dock superior: recursos ficam guardados em botões compactos e abrem em popover.
-    st.markdown('<div class="hud-dock-label">JARVIS // COMMAND CENTER</div>', unsafe_allow_html=True)
-    d1,d2,d3,d4,d5,d6,d7,d8=st.columns([1.05,1.05,1.05,1.05,1.05,1.05,1.05,1.35])
-    with d1:
+    st.markdown('<div class="refined-top"><div class="refined-brand"><i>J</i>ARVIS // COMMAND OS</div><div class="refined-sub">CORE • AGENT LOOP • TOOLS • LIVE OPERATIONS</div><div class="refined-system"><b>●</b> SYSTEM ONLINE • V13.3.2</div></div>',unsafe_allow_html=True)
+    st.markdown('<div class="refined-dock">',unsafe_allow_html=True); d=st.columns([1,1,1,1,1,1,1,1.15])
+    with d[0]:
         with st.popover('SYSTEM'):
-            st.markdown('### SYSTEM')
-            st.write('Core: **ONLINE**')
-            st.write(f"Local Agent: **{'ONLINE' if _online else 'OFFLINE'}**")
-            st.write(f"CPU: **{_info.get('cpu_percent','—')}%**")
-            st.write(f"RAM: **{_info.get('ram_em_uso_percent','—')}%**")
-            st.write(f"Devices: **{len(_online_devices)}/{len(_devices)}**")
-    with d2:
+            st.markdown('**SYSTEM**'); st.write('Core: **ONLINE**'); st.write(f"Local Agent: **{'ONLINE' if _online else 'OFFLINE'}**"); st.write(f"CPU: **{_info.get('cpu_percent','—')}%**"); st.write(f"RAM: **{_info.get('ram_em_uso_percent','—')}%**")
+    with d[1]:
         with st.popover('TASKS'):
-            st.markdown('### TASKS')
-            ts=task_summary(); st.metric('Pendentes',ts['pendentes']); st.metric('Atrasadas',ts['atrasadas'])
-            for t in st.session_state.tasks[-6:]:
-                st.write(f"#{t.get('id')} • {task_status_text(t)} • {t.get('text','')[:45]}")
-    with d3:
+            ts=task_summary(); st.markdown('**TASKS**'); st.write(f"Pendentes: **{ts['pendentes']}**"); st.write(f"Atrasadas: **{ts['atrasadas']}**"); st.write(f"Concluídas: **{ts['concluidas']}**"); [st.caption(f"#{t.get('id')} • {task_status_text(t)} • {t.get('text','')[:45]}") for t in st.session_state.tasks[-5:]]
+    with d[2]:
         with st.popover('AGENTS'):
-            st.markdown('### AGENTS')
-            for name in list(AGENTS.keys())[:10]: st.write(f"● {name}")
-    with d4:
+            st.markdown('**AGENTS**'); [st.caption(f'● {n}') for n in list(AGENTS.keys())[:10]]
+    with d[3]:
         with st.popover('TOOLS'):
-            st.markdown('### TOOLS')
-            rows=tool_rows()
-            for r in rows[:12]:
-                name = r.get('name',r.get('tool','tool')) if isinstance(r,dict) else str(r)
-                st.write(f"● {name}")
-    with d5:
+            st.markdown('**TOOLS**'); [st.caption(f"● {(r.get('name',r.get('tool','tool')) if isinstance(r,dict) else str(r))}") for r in tool_rows()[:12]]
+    with d[4]:
         with st.popover('MEMORY'):
-            st.markdown('### MEMORY')
-            st.write(f"Local memories: **{len(st.session_state.memory)}**")
-            st.write(f"Honcho: **{st.session_state.honcho_status}**")
-            st.write(f"Skills: **{len(SKILLS)}**")
-    with d6:
+            st.markdown('**MEMORY**'); st.write(f"Local: **{len(st.session_state.memory)}**"); st.write(f"Honcho: **{st.session_state.honcho_status}**"); st.write(f"Skills: **{len(SKILLS)}**")
+    with d[5]:
         with st.popover('DEVICES'):
-            st.markdown('### DEVICES')
+            st.markdown('**DEVICES**'); [st.caption(f"● {dv.get('name') or dv.get('device_id','device')} — {dv.get('status','unknown')}") for dv in _devices[:10]]
             if not _devices: st.caption('Nenhum dispositivo registrado.')
-            for dv in _devices[:10]:
-                st.write(f"● {dv.get('name') or dv.get('device_id','device')} — {dv.get('status','unknown')}")
-    with d7:
+    with d[6]:
         with st.popover('SECURITY'):
-            st.markdown('### SECURITY')
-            st.write(f"Kill Switch: **{'ON' if _kill else 'OFF'}**")
-            st.write(f"Approvals: **{_pending}**")
-            st.caption('Permission Manager continua sendo a camada que autoriza ações.')
-    with d8:
+            st.markdown('**SECURITY**'); st.write(f"Kill Switch: **{'ON' if _kill else 'OFF'}**"); st.write(f"Approvals: **{_pending}**"); st.caption('Permission Manager ativo.')
+    with d[7]:
         with st.popover('MISSIONS'):
-            st.markdown('### MISSIONS')
-            st.metric('Running',len(_running)); st.metric('Done',len(_done)); st.metric('Failed',len(_failed))
-            if _missions: st.caption(str(_missions[-1].get('goal',''))[:120])
+            st.markdown('**MISSIONS**'); st.write(f"Running: **{len(_running)}**"); st.write(f"Done: **{len(_done)}**"); st.write(f"Failed: **{len(_failed)}**")
+    st.markdown('</div>',unsafe_allow_html=True)
 
-    left,right=st.columns([1.0,1.25])
+    left,center,right=st.columns([.78,1.65,1.0],gap='small')
     with left:
-        st.markdown(f'''<div class="hud-status-card"><div class="hud-section">SYSTEM STATUS</div>
-        <div class="hud-row"><span>CORE</span><b class="ok">ONLINE</b></div>
-        <div class="hud-row"><span>LOCAL AGENT</span><b class="{'ok' if _online else 'bad'}">{'ONLINE' if _online else 'OFFLINE'}</b></div>
-        <div class="hud-row"><span>SECURITY</span><b class="{'bad' if _kill else 'ok'}">{'LOCKED' if _kill else 'ACTIVE'}</b></div>
-        <div class="hud-row"><span>APPROVALS</span><b class="warn">{_pending:02d}</b></div></div>''',unsafe_allow_html=True)
-        st.markdown(f'''<div class="hud-status-card"><div class="hud-section">TELEMETRY</div>
-        <div class="hud-row"><span>CPU</span><b>{_info.get('cpu_percent','—')}%</b></div>
-        <div class="hud-row"><span>RAM</span><b>{_info.get('ram_em_uso_percent','—')}%</b></div>
-        <div class="hud-row"><span>DEVICES</span><b>{len(_online_devices)}/{len(_devices)}</b></div>
-        <div class="hud-row"><span>EVENTS</span><b>{len(_events):04d}</b></div></div>''',unsafe_allow_html=True)
-        st.markdown(f'''<div class="hud-status-card"><div class="hud-section">CURRENT OPERATION</div>
-        <div class="hud-live-line"><span class="hud-live-dot"></span><b>{_cur_agent}</b><span class="hud-badge">{_cur_status}</span></div>
-        <div class="hud-action">{_cur_action}</div><div class="hud-meta">DURATION {_dur_text} • EVENTS {_live.get('event_count',0):04d}</div></div>''',unsafe_allow_html=True)
-
+        st.markdown(f'''<div class="refined-card"><div class="refined-title">SYSTEM STATUS</div><div class="refined-row"><span>CORE</span><b class="refined-ok">ONLINE</b></div><div class="refined-row"><span>LOCAL AGENT</span><b class="{'refined-ok' if _online else 'refined-bad'}">{'ONLINE' if _online else 'OFFLINE'}</b></div><div class="refined-row"><span>SECURITY</span><b class="{'refined-bad' if _kill else 'refined-ok'}">{'LOCKED' if _kill else 'ACTIVE'}</b></div><div class="refined-row"><span>APPROVALS</span><b class="refined-warn">{_pending:02d}</b></div></div>''',unsafe_allow_html=True)
+        st.markdown(f'''<div class="refined-card"><div class="refined-title">TELEMETRY</div><div class="refined-row"><span>CPU</span><b>{_info.get('cpu_percent','—')}%</b></div><div class="refined-row"><span>RAM</span><b>{_info.get('ram_em_uso_percent','—')}%</b></div><div class="refined-row"><span>DEVICES</span><b>{len(_online_devices)}/{len(_devices)}</b></div><div class="refined-row"><span>EVENTS</span><b>{len(_events):04d}</b></div></div>''',unsafe_allow_html=True)
+        st.markdown(f'''<div class="refined-card"><div class="refined-title">CURRENT OPERATION</div><div class="refined-row"><span>AGENT</span><b>{_cur_agent}</b></div><div class="refined-row"><span>STATUS</span><b class="refined-warn">{_cur_status}</b></div><div class="refined-row"><span>DURATION</span><b>{_dur_text}</b></div><div style="color:#766b6b;font-size:.57rem;margin-top:.5rem;line-height:1.4">{_cur_action}</div></div>''',unsafe_allow_html=True)
+    with center:
+        st.markdown(f'''<div class="refined-center"><div class="refined-grid"></div><div class="refined-orb"><div class="refined-ring r3"></div><div class="refined-ring r1"></div><div class="refined-ring r2"></div><div class="refined-core"><strong>{len(_running):02d}</strong><span>ACTIVE</span></div></div><div class="refined-caption">JARVIS CORE • {len(_running):02d} ACTIVE MISSIONS • V13.3.2</div></div>''',unsafe_allow_html=True)
     with right:
-        st.markdown('<div class="hud-ai-title"><span>JARVIS AI</span><span>AGENT LOOP • TOOLS</span></div>',unsafe_allow_html=True)
-        st.markdown(f'''<div class="hud-ai-panel"><div class="hud-ai-orb"><div class="hud-ai-orb-core">J</div></div>
-        <div class="hud-ai-state"><b>{_cur_agent}</b><span class="hud-badge">{_cur_status}</span></div>
-        <div class="hud-ai-action">{_cur_action}</div>
-        <div class="hud-loop"><span>PLANNER</span><i>→</i><span>AGENT</span><i>→</i><span>TOOLS</span><i>→</i><span>VERIFY</span></div></div>''',unsafe_allow_html=True)
-        st.markdown('<div class="hud-feed-title">LIVE FEED</div>',unsafe_allow_html=True)
-        recent=_live.get('recent') or []
-        if not recent:
-            st.markdown('<div class="hud-feed">Aguardando operações do Jarvis...</div>',unsafe_allow_html=True)
-        else:
-            for x in recent[:5]:
-                st.markdown(f'''<div class="hud-feed"><span>{str(x.get('started_at',''))[11:19] or '--:--:--'}</span><b>{str(x.get('agent') or 'SYSTEM')[:18]}</b><em>{str(x.get('status',''))[:10].upper()}</em><p>{str(x.get('instruction') or x.get('result') or '')[:90]}</p></div>''',unsafe_allow_html=True)
-        ai_prompt=st.text_input('Comando para Jarvis',key='hud_ai_prompt',placeholder='Fale com o Jarvis...',label_visibility='collapsed')
-        if st.button('ENVIAR PARA JARVIS',key='hud_ai_send',use_container_width=True) and ai_prompt.strip():
+        st.markdown(f'''<div class="refined-ai"><div class="refined-ai-head"><span>JARVIS AI</span><span>AGENT LOOP • TOOLS</span></div><div class="refined-ai-orb">J</div><div class="refined-ai-status"><b>{_cur_agent}</b> • {_cur_status}</div><div class="refined-ai-action">{_cur_action}</div><div class="refined-loop"><span>PLANNER</span><i>→</i><span>AGENT</span><i>→</i><span>TOOLS</span><i>→</i><span>VERIFY</span></div></div>''',unsafe_allow_html=True)
+        st.markdown('<div class="refined-card"><div class="refined-title">LIVE OPERATIONS</div>',unsafe_allow_html=True)
+        for x in (_live.get('recent') or [])[:4]: st.markdown(f'''<div class="refined-feed-item"><b>{str(x.get('started_at',''))[11:19] or '--:--:--'}</b> {str(x.get('agent') or 'SYSTEM')[:15]} <em>{str(x.get('status',''))[:9].upper()}</em><p>{str(x.get('instruction') or x.get('result') or '')[:80]}</p></div>''',unsafe_allow_html=True)
+        if not (_live.get('recent') or []): st.caption('Aguardando operações...')
+        st.markdown('</div>',unsafe_allow_html=True)
+        ai_prompt=st.text_input('Comando',key='hud_ai_prompt_v132',placeholder='Fale com o Jarvis...',label_visibility='collapsed')
+        if st.button('ENVIAR',key='hud_ai_send_v132',use_container_width=True) and ai_prompt.strip():
             try:
-                tool,tool_result=execute_tool(ai_prompt.strip())
-                memory_context=honcho_context(ai_prompt.strip())
-                answer=ask_llm(ai_prompt.strip(),tool_result,memory_context)
-                st.session_state.hud_ai_history=st.session_state.get('hud_ai_history',[])[-5:]+[{'q':ai_prompt.strip(),'a':answer}]
-                st.rerun()
+                tool,tool_result=execute_tool(ai_prompt.strip()); memory_context=honcho_context(ai_prompt.strip()); answer=ask_llm(ai_prompt.strip(),tool_result,memory_context); st.session_state.hud_ai_history=st.session_state.get('hud_ai_history',[])[-5:]+[{'q':ai_prompt.strip(),'a':answer}]; st.rerun()
             except Exception as e: st.error(f'Erro no Jarvis: {e}')
-        for item in st.session_state.get('hud_ai_history',[])[-3:]:
-            st.markdown(f'''<div class="hud-chat"><small>VOCÊ</small><p>{item['q'][:180]}</p><small>JARVIS</small><p>{item['a'][:420]}</p></div>''',unsafe_allow_html=True)
-
-    st.markdown(f'''<div class="hud-center-sphere-wrap"><div class="hud-sphere"><div class="hud-scan"></div><div class="hud-sphere-core"><strong>{len(_running):02d}</strong><span>ACTIVE</span></div><div class="hud-ring r1"></div><div class="hud-ring r2"></div><div class="hud-ring r3"></div></div><div class="hud-sphere-caption">JARVIS CORE • {len(_running):02d} ACTIVE MISSIONS • V13.3.1</div></div>''',unsafe_allow_html=True)
     st.markdown(f'''<div class="hud-bottom"><span>CORE ONLINE</span><span>{len(_missions):04d} MISSIONS</span><span>{len(SKILLS):02d} SKILLS</span><span>{len(_events):04d} EVENTS</span><span>PERMISSION MANAGER ENFORCED</span></div>''',unsafe_allow_html=True)
+
 # V13.2 — Agent Map
 with tabs[15]:
     st.subheader('Agent Map — V13.2')
