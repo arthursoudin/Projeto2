@@ -13,9 +13,10 @@ PERMISSIONS = {
     'system_info': 'livre', 'list_files': 'livre', 'read_file': 'livre', 'read_log': 'livre',
     'open_app': 'livre', 'open_url': 'livre', 'search_web': 'livre',
     'open_folder': 'livre', 'open_file': 'livre',
-    'create_folder': 'livre', 'create_file': 'confirmar', 'append_file': 'confirmar',
+    'create_folder': 'livre', 'create_file': 'livre', 'append_file': 'livre',
     'copy_path': 'livre', 'move_path': 'livre', 'rename_path': 'livre',
     'delete_path': 'confirmar',
+    'schedule_add': 'livre', 'schedule_list': 'livre', 'schedule_remove': 'livre', 'schedule_toggle': 'livre',
 }
 CONFIRM_ACTIONS = {a for a, lvl in PERMISSIONS.items() if lvl == 'confirmar'}
 
@@ -210,11 +211,9 @@ def _parse_clause(t, ctx):
             if action == 'open_folder' or name: return (action, params)
             return None
 
-    # informações do sistema / métricas do PC
+    # informações do sistema
     if (re.search(r'\b(?:informacoes?|info|dados|especificacoes?|configuracoes?|status)\b.{0,25}\b(?:pc|computador|sistema|maquina|notebook)\b', n)
-            or re.search(r'\b(?:quanta|quanto|qual)\b.{0,30}\b(?:ram|disco|armazenamento|espaco|cpu|processador)\b', n)
-            or re.search(r'\b(?:verifique|verificar|veja|mostrar|mostre|consulte|consultar)\b.{0,25}\b(?:cpu|processador|ram|memoria|disco|armazenamento)\b', n)
-            or re.search(r'\b(?:uso|utilizacao|utilizacao|percentual|porcentagem)\b.{0,20}\b(?:cpu|processador|ram|memoria|disco)\b', n)):
+            or re.search(r'\b(?:quanta|quanto|qual)\b.{0,30}\b(?:ram|disco|armazenamento|espaco)\b', n)):
         return ('system_info', {})
 
     # navegador: pesquisar
@@ -241,11 +240,7 @@ def _parse_clause(t, ctx):
     return None
 
 
-def parse_pc_commands(text):
-    """Frase -> lista de passos [(acao, params), ...]. Lista vazia = não é um comando de PC."""
-    n = _norm(text or '')
-    if re.search(r'\b(lembre|lembra|lembrete|tarefa)\b', n):  # "me lembre de apagar..." não é comando
-        return []
+def _parse_steps(text):
     ctx, steps = {}, []
     for clause in _split_clauses(text or ''):
         step = _parse_clause(clause, ctx)
@@ -253,8 +248,145 @@ def parse_pc_commands(text):
     return steps
 
 
+# ------------------------------------------------------------ agendamento (V12.4)
+_DAYTOK = r'(?:segunda|terca|quarta|quinta|sexta|sabado|domingo)s?(?:-feira)?'
+_DAYIDX = {'segunda': 0, 'terca': 1, 'quarta': 2, 'quinta': 3, 'sexta': 4, 'sabado': 5, 'domingo': 6}
+_NO_TIME = 'Para agendar, informe o horário. Exemplo: "todo dia às 9h abra o vs code".'
+
+
+def _find_time(t, n, need_as):
+    """Acha um horário. Retorna (h, m, (ini, fim)), 'invalido' ou None. n = texto normalizado."""
+    m = re.search(r'\bmeio[\s-]?dia\b', n)
+    if m: return 12, 0, m.span()
+    m = re.search(r'\bmeia[\s-]?noite\b', n)
+    if m: return 0, 0, m.span()
+    found = None
+    m = re.search(r'\bas\s+(\d{1,2})(?:\s*(?::\s*(\d{2})|h\s*(\d{2})?|horas?))?(?![\d:])', n)
+    if m:
+        has_suffix = bool(re.search(r'\d\s*(?::|h)', m.group(0)) or re.search(r'horas?', m.group(0)))
+        accent = 'à' in t[m.start():m.start() + 2].lower()
+        if has_suffix or accent or not need_as: found = m
+    if not found and not need_as:
+        found = re.search(r'\b(\d{1,2})\s*(?::\s*(\d{2})|h\s*(\d{2})?)\b(?![\d:])', n)
+    if not found: return None
+    h = int(found.group(1)); mi = int(found.group(2) or found.group(3) or 0)
+    s, e = found.span()
+    pm = re.match(r'\s+da\s+(manha|tarde|noite|madrugada)\b', n[e:])
+    if pm:
+        e += pm.end()
+        if pm.group(1) in ('tarde', 'noite') and h < 12: h += 12
+    if not (0 <= h <= 23 and 0 <= mi <= 59): return 'invalido'
+    return h, mi, (s, e)
+
+
+def _units(num, unit):
+    return int(num) * (60 if unit.startswith('h') else 1)
+
+
+def _parse_schedule(text):
+    """Detecta frases de agendamento. Retorna None ou {'when','error','rest'}."""
+    t = text or ''
+    n = _norm(t)
+    if len(n) != len(t): return None
+    spans, when, err = [], None, None
+
+    m = re.search(r'\ba\s+cada\s+(?:(\d+)\s*(minutos?|min|horas?|h)\b|(meia\s+hora)\b|(uma\s+hora|hora)\b)', n)
+    if m:
+        mins = 30 if m.group(3) else 60 if m.group(4) else _units(m.group(1), m.group(2))
+        spans.append(m.span())
+        if mins < 5: err = 'O intervalo mínimo de uma rotina é 5 minutos.'
+        elif mins > 1440: err = 'O intervalo máximo é 24 horas.'
+        else: when = {'kind': 'interval', 'minutes': mins}
+    if when is None and err is None:
+        m = re.search(r'\b(?:daqui\s+a|daqui|em)\s+(?:(\d+)\s*(minutos?|min|horas?|h)\b|(meia\s+hora)\b|(uma\s+hora)\b|(um\s+minuto)\b)', n)
+        if m:
+            mins = 30 if m.group(3) else 60 if m.group(4) else 1 if m.group(5) else _units(m.group(1), m.group(2))
+            spans.append(m.span())
+            if mins < 1 or mins > 10080: err = 'Tempo inválido (use de 1 minuto até 7 dias).'
+            else: when = {'kind': 'once', 'in_minutes': mins}
+    if when is None and err is None:
+        days = None; ms = None
+        ms = re.search(rf'\bde\s+({_DAYTOK})\s+a\s+({_DAYTOK})\b', n)
+        if ms:
+            a, b = (_DAYIDX[re.match(r'[a-z]+', ms.group(i)).group(0)] for i in (1, 2))
+            days = [(a + k) % 7 for k in range(((b - a) % 7) + 1)]
+        if days is None:
+            ms = re.search(r'\b(?:dias\s+uteis|dias\s+de\s+semana|durante\s+a\s+semana)\b', n)
+            if ms: days = [0, 1, 2, 3, 4]
+        if days is None:
+            ms = re.search(r'\b(?:fins?|finais?)\s+de\s+semana\b', n)
+            if ms: days = [5, 6]
+        if days is None:
+            ms = re.search(rf'\b(?:toda|todas\s+as|todo|todos\s+os|nas|nos|aos)\s+({_DAYTOK}(?:\s*(?:,|\be\b)\s*{_DAYTOK})*)', n)
+            if ms: days = sorted({_DAYIDX[x] for x in re.findall(r'(segunda|terca|quarta|quinta|sexta|sabado|domingo)', ms.group(1))})
+        daily = None if days is not None else re.search(r'\b(?:todo\s+dia|todos\s+os\s+dias|diariamente)\b', n)
+        tomorrow = re.search(r'\bamanha\b', n); today = re.search(r'\bhoje\b', n)
+        kw = ms if days is not None else daily or tomorrow or today
+        tm = _find_time(t, n, need_as=kw is None)
+        if kw is None:
+            # só horário ("às 18h abra ..."): exige "às" e evita confundir com conteúdo de arquivo
+            if not isinstance(tm, tuple): return None
+            if not (tm[2][0] <= 4 or not re.search(r'\b(?:texto|conteudo)\b|["“]', n)): return None
+        else:
+            spans.append(kw.span())
+        if tm == 'invalido': err = 'Horário inválido. Use de 00:00 até 23:59.'
+        elif tm is None: err = _NO_TIME
+        else:
+            h, mi, sp = tm; spans.append(sp); hhmm = f'{h:02d}:{mi:02d}'
+            if days is not None: when = {'kind': 'weekly', 'days': days, 'time': hhmm}
+            elif daily: when = {'kind': 'daily', 'time': hhmm}
+            else: when = {'kind': 'once', 'time': hhmm, 'day': 'tomorrow' if tomorrow else 'today' if today else 'auto'}
+            if tomorrow and kw is not tomorrow: spans.append(tomorrow.span())
+            if today and kw is not today and not tomorrow: spans.append(today.span())
+
+    out, pos = [], 0
+    for s0, e0 in sorted(spans):
+        if s0 >= pos: out.append(t[pos:s0]); pos = e0
+    out.append(t[pos:])
+    rest = ' '.join(''.join(out).split())
+    rest = re.sub(r'^[\s,;:.\-–]+|[\s,;:.\-–]+$', '', rest)
+    rest = re.sub(r'^(?:e|entao|então|depois|para|que)\s+', '', rest, flags=re.I)
+    rest = re.sub(r'\s+(?:e|para|as|às|a)$', '', rest, flags=re.I)
+    return {'when': when, 'error': err, 'rest': rest}
+
+
+def parse_pc_commands(text):
+    """Frase -> lista de passos [(acao, params), ...]. Lista vazia = não é um comando de PC."""
+    text = text or ''
+    n = _norm(text)
+    if re.search(r'\b(lembre|lembra|lembrete|tarefa)\b', n):  # "me lembre de apagar..." não é comando
+        return []
+
+    # gerenciar rotinas
+    if re.search(r'\b(?:liste|listar|lista|mostre|mostrar|quais|veja|ver)\b.*\b(?:rotinas?|automacoes|agendamentos?)\b', n):
+        return [('schedule_list', {})]
+    m = re.search(r'\b(?:cancele|cancelar|remova|remover|apague|apagar|exclua|excluir|delete)\s+(?:a\s+)?(?:rotina|automacao|agendamento)\s*#?(\d+)', n)
+    if m: return [('schedule_remove', {'id': int(m.group(1))})]
+    m = re.search(r'\b(pause|pausar|desative|desativar|ative|ativar|retome|retomar)\s+(?:a\s+)?(?:rotina|automacao|agendamento)\s*#?(\d+)', n)
+    if m: return [('schedule_toggle', {'id': int(m.group(2)), 'enabled': m.group(1) in ('ative', 'ativar', 'retome', 'retomar')})]
+
+    # criar rotina: "<quando> <o que fazer>"
+    sched = _parse_schedule(text)
+    if sched:
+        steps = _parse_steps(sched['rest'])
+        if not steps: return []          # ex.: "toda segunda vou à academia" é só conversa
+        if sched['error']: return [('schedule_invalid', {'error': sched['error']})]
+        if any(a in CONFIRM_ACTIONS for a, _ in steps):
+            return [('schedule_invalid', {'error': 'Rotinas não podem apagar nada (apagar exige confirmação na hora).'})]
+        if len(steps) > 8: return [('schedule_invalid', {'error': 'Máximo de 8 passos por rotina.'})]
+        resumo = '; '.join(describe_step(a, p) for a, p in steps)[:200]
+        return [('schedule_add', {'when': sched['when'], 'resumo': resumo,
+                                  'steps': [{'action': a, 'params': p} for a, p in steps]})]
+
+    return _parse_steps(text)
+
+
 def describe_step(action, params):
     p = params or {}
+    if action == 'schedule_add': return f"agendar: {p.get('resumo', '')}"
+    if action == 'schedule_remove': return f"remover rotina #{p.get('id')}"
+    if action == 'schedule_toggle': return f"{'ativar' if p.get('enabled') else 'pausar'} rotina #{p.get('id')}"
+    if action == 'schedule_list': return 'listar rotinas'
     if action == 'delete_path': return f"apagar \"{p.get('name')}\""
     if action in ('move_path', 'copy_path'): return f"{action.split('_')[0]} \"{p.get('src')}\" -> \"{p.get('dst')}\""
     return f"{action} {p.get('name') or p.get('app') or p.get('url') or p.get('query') or ''}".strip()

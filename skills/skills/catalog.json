@@ -1,0 +1,67 @@
+{
+  "planejamento": {
+    "description": "Transforma objetivos em planos e passos executáveis.",
+    "keywords": [
+      "planejar",
+      "plano",
+      "organizar",
+      "objetivo",
+      "projeto"
+    ]
+  },
+  "tarefas": {
+    "description": "Cria, consulta e acompanha tarefas.",
+    "keywords": [
+      "tarefa",
+      "todo",
+      "fazer",
+      "lembrete",
+      "pendência",
+      "prazo"
+    ]
+  },
+  "memoria": {
+    "description": "Salva e recupera contexto entre conversas.",
+    "keywords": [
+      "lembre",
+      "lembrar",
+      "guarde",
+      "memória",
+      "recorde",
+      "você lembra"
+    ]
+  },
+  "web": {
+    "description": "Pesquisa informações públicas na web.",
+    "keywords": [
+      "pesquise",
+      "pesquisar",
+      "internet",
+      "web",
+      "site",
+      "notícia"
+    ]
+  },
+  "programacao": {
+    "description": "Ajuda com Python, Java, JavaScript, HTML, CSS e arquitetura.",
+    "keywords": [
+      "python",
+      "java",
+      "javascript",
+      "html",
+      "css",
+      "código",
+      "programação"
+    ]
+  },
+  "postgresql": {
+    "description": "Ajuda com SQL e PostgreSQL.",
+    "keywords": [
+      "sql",
+      "postgres",
+      "postgresql",
+      "banco de dados",
+      "database"
+    ]
+  }
+}

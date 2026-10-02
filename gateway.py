@@ -3,9 +3,9 @@ from datetime import datetime, timezone
 from fastapi import FastAPI, Request, Header, HTTPException, BackgroundTasks
 from fastapi.responses import PlainTextResponse
 
-import whatsapp, core, voice_io, store
+import whatsapp, core, voice_io, store, security
 
-VERSION='12.7.0'
+VERSION='12.9.0'
 app=FastAPI(title='Jarvis Gateway',version=VERSION)
 LOCAL_AGENT_TOKEN=os.getenv('LOCAL_AGENT_TOKEN','')
 COMMANDS=[]
@@ -67,27 +67,44 @@ def list_tasks(x_agent_token: str|None = Header(default=None)):
 ALLOWED_ACTIONS={'open_app','open_folder','open_file','open_url','search_web','create_folder','create_file','append_file','read_file','list_files','move_path','copy_path','rename_path','delete_path','system_info','read_log','schedule_add','schedule_list','schedule_remove','schedule_toggle'}
 CONFIRM_ACTIONS={'delete_path'}
 
-def enqueue(action, params):
-    """Valida e coloca um comando na fila do agente. Levanta HTTPException se for recusado."""
+def enqueue(action, params, agent='app', source='app', bypass_approval=False):
+    """V12.9: passa pela camada central de permissões antes de entrar na fila local."""
     params=params or {}
     if action not in ALLOWED_ACTIONS: raise HTTPException(status_code=400,detail='Ação não permitida')
     if not isinstance(params,dict): raise HTTPException(status_code=400,detail='params inválido')
-    if action in CONFIRM_ACTIONS and params.get('confirmed') is not True: raise HTTPException(status_code=400,detail='Ação exige confirmação')
     if action=='schedule_add':
         steps=params.get('steps')
         bad=not isinstance(steps,list) or any((not isinstance(x,dict)) or x.get('action') in CONFIRM_ACTIONS or str(x.get('action','')).startswith('schedule_') for x in steps)
         if bad: raise HTTPException(status_code=400,detail='Rotina com passo não permitido')
+    p=security.policy()
+    if p.get('kill_switch'):
+        security.audit('action_blocked',action=action,agent=agent,reason='kill_switch',risk=security.risk_for(action),params=params)
+        raise HTTPException(status_code=423,detail='Kill Switch ativo: novas ações estão bloqueadas.')
+    if security.blocked(action):
+        security.audit('action_blocked',action=action,agent=agent,reason='policy_block',risk=security.risk_for(action),params=params)
+        raise HTTPException(status_code=403,detail='Ação bloqueada pela política de segurança.')
+    cycle_id=params.get('_security_cycle_id','default')
+    if security.needs_approval(action) and not bypass_approval and params.get('_security_approved') is not True:
+        ap=security.create_approval(action,params,agent=agent,source=source)
+        return {'pending_approval':True,'approval':ap}
+    allowed, limit_error=security.check_limits(agent,cycle_id)
+    if not allowed:
+        security.audit('action_blocked',action=action,agent=agent,reason='limit',risk=security.risk_for(action),params=params)
+        raise HTTPException(status_code=429,detail=limit_error)
     if len(COMMANDS)>=50: raise HTTPException(status_code=429,detail='Fila cheia')
     cid=secrets.token_urlsafe(12)
-    COMMANDS.append({'id':cid,'action':action,'params':params,'created_at':datetime.now(timezone.utc).isoformat()})
+    clean=dict(params); clean.pop('_security_approved',None); clean.pop('_security_cycle_id',None)
+    COMMANDS.append({'id':cid,'action':action,'params':clean,'created_at':datetime.now(timezone.utc).isoformat(),'agent':agent})
+    security.audit('action_queued',command_id=cid,action=action,agent=agent,risk=security.risk_for(action),params=clean)
     return cid
 
 @app.post('/agent/commands')
 async def add_command(request:Request, x_agent_token: str|None = Header(default=None)):
     if not auth(x_agent_token): raise HTTPException(status_code=401,detail='Agente não autorizado')
     body=await request.json(); action=body.get('action'); params=body.get('params') or {}
-    cid=enqueue(action,params)
-    return {'ok':True,'command_id':cid,'queued':True,'action':action}
+    result=enqueue(action,params,agent=str(body.get('agent','app')),source=str(body.get('source','app')))
+    if isinstance(result,dict): return {'ok':True,**result,'action':action}
+    return {'ok':True,'command_id':result,'queued':True,'action':action}
 
 @app.get('/agent/poll')
 def poll_commands(x_agent_token: str|None = Header(default=None)):
@@ -151,13 +168,62 @@ def run_pc(action, params=None):
     if not agent_online():
         return {'ok':False,'error':'O agente local está offline. Abra o start_agent.bat no PC.'}
     try:
-        cid=enqueue(action,params or {})
+        cid=enqueue(action,params or {},agent='whatsapp',source='whatsapp')
     except HTTPException as e:
         return {'ok':False,'error':str(e.detail)}
     res=wait_result(cid)
     if res is None:
         return {'ok':False,'command_id':cid,'action':action,'error':'O agente local não respondeu a tempo. Verifique o start_agent.bat.'}
     return {'ok':bool(res.get('ok')),'command_id':cid,'action':action,'result':res}
+
+# ------------------------------------------------------------------ V12.9 Security & Permissions
+@app.get('/security/status')
+def security_status(x_agent_token: str|None = Header(default=None)):
+    if not auth(x_agent_token): raise HTTPException(status_code=401,detail='Não autorizado')
+    return {'ok':True,**security.status()}
+
+@app.get('/security/approvals')
+def security_approvals(x_agent_token: str|None = Header(default=None)):
+    if not auth(x_agent_token): raise HTTPException(status_code=401,detail='Não autorizado')
+    return {'ok':True,'approvals':security.approvals()[-100:]}
+
+@app.post('/security/approve/{approval_id}')
+async def security_approve(approval_id: str, request: Request, x_agent_token: str|None = Header(default=None)):
+    if not auth(x_agent_token): raise HTTPException(status_code=401,detail='Não autorizado')
+    item=security.decide_approval(approval_id,'approved')
+    if not item: raise HTTPException(status_code=404,detail='Aprovação pendente não encontrada')
+    try:
+        result=enqueue(item['action'],dict(item.get('params') or {}),agent=item.get('agent','app'),source=item.get('source','app'),bypass_approval=True)
+    except HTTPException as e:
+        return {'ok':False,'approval':item,'error':str(e.detail)}
+    cid=result if isinstance(result,str) else result.get('command_id')
+    return {'ok':True,'approval':item,'command_id':cid,'queued':bool(cid)}
+
+@app.post('/security/deny/{approval_id}')
+def security_deny(approval_id: str, x_agent_token: str|None = Header(default=None)):
+    if not auth(x_agent_token): raise HTTPException(status_code=401,detail='Não autorizado')
+    item=security.decide_approval(approval_id,'denied')
+    if not item: raise HTTPException(status_code=404,detail='Aprovação pendente não encontrada')
+    return {'ok':True,'approval':item}
+
+@app.post('/security/kill-switch')
+async def security_kill(request: Request, x_agent_token: str|None = Header(default=None)):
+    if not auth(x_agent_token): raise HTTPException(status_code=401,detail='Não autorizado')
+    body=await request.json(); enabled=bool(body.get('enabled',True)) if isinstance(body,dict) else True
+    p=security.policy(); p['kill_switch']=enabled; security.save_policy(p)
+    if enabled: security.clear_pending()
+    security.audit('kill_switch_changed',enabled=enabled)
+    return {'ok':True,'kill_switch':enabled}
+
+@app.post('/security/policy')
+async def security_policy(request: Request, x_agent_token: str|None = Header(default=None)):
+    if not auth(x_agent_token): raise HTTPException(status_code=401,detail='Não autorizado')
+    body=await request.json(); return {'ok':True,'policy':security.save_policy(body if isinstance(body,dict) else {})}
+
+@app.get('/security/audit')
+def security_audit(x_agent_token: str|None = Header(default=None)):
+    if not auth(x_agent_token): raise HTTPException(status_code=401,detail='Não autorizado')
+    rows=store.load('security_audit',[]); return {'ok':True,'audit':rows[-100:] if isinstance(rows,list) else []}
 
 _BRAIN={'obj':None}
 def get_brain():

@@ -252,3 +252,15 @@ O loop `overnight_agents.py` agora lê a configuração do Gateway. No Render, a
 A configuração é salva na chave `overnight_config` do armazenamento do Jarvis. Com Supabase configurado, ela sobrevive a reinícios do Render.
 
 No PC, basta iniciar uma vez `start_overnight_loop.bat`. Depois disso, não é necessário editar o `.bat` ou usar o CMD para mudar os horários. O processo consulta o Gateway periodicamente e aplica alterações feitas no Dashboard.
+
+## V12.9 — Security + Permissions
+- Permission Manager central antes da fila do agente local.
+- Risco baixo/médio/alto por ação.
+- Aprovação manual para médio/alto.
+- Kill Switch para bloquear novas ações e cancelar aprovações pendentes.
+- Auditoria persistente via `store` (Supabase quando configurado, arquivo como fallback).
+- Limites configuráveis por ciclo e por agente.
+- Matriz de ferramentas/ações visível no dashboard.
+- Exclusão continua bloqueada por política padrão.
+
+Endpoints do gateway: `/security/status`, `/security/approvals`, `/security/approve/{id}`, `/security/deny/{id}`, `/security/kill-switch`, `/security/policy`, `/security/audit`.

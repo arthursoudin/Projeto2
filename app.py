@@ -244,6 +244,32 @@ def get_agent_status():
         r.raise_for_status(); return r.json()
     except Exception as e: return {'ok':False,'error':f'Gateway não respondeu ({type(e).__name__}). O plano grátis do Render dorme; tente de novo em instantes.'}
 
+def get_security_status():
+    if not GATEWAY_URL or not LOCAL_AGENT_TOKEN: return {'ok':False,'error':'Gateway não configurado.'}
+    try:
+        r=requests.get(f'{GATEWAY_URL}/security/status',headers={'X-Agent-Token':LOCAL_AGENT_TOKEN},timeout=6); return r.json()
+    except Exception as e: return {'ok':False,'error':str(e)}
+
+def get_security_approvals():
+    try:
+        r=requests.get(f'{GATEWAY_URL}/security/approvals',headers={'X-Agent-Token':LOCAL_AGENT_TOKEN},timeout=6); return r.json().get('approvals',[])
+    except Exception: return []
+
+def security_decide(approval_id, decision):
+    try:
+        r=requests.post(f'{GATEWAY_URL}/security/{decision}/{approval_id}',headers={'X-Agent-Token':LOCAL_AGENT_TOKEN},timeout=8); return r.json()
+    except Exception as e: return {'ok':False,'error':str(e)}
+
+def security_kill(enabled):
+    try:
+        r=requests.post(f'{GATEWAY_URL}/security/kill-switch',json={'enabled':enabled},headers={'X-Agent-Token':LOCAL_AGENT_TOKEN},timeout=8); return r.json()
+    except Exception as e: return {'ok':False,'error':str(e)}
+
+def security_policy_save(data):
+    try:
+        r=requests.post(f'{GATEWAY_URL}/security/policy',json=data,headers={'X-Agent-Token':LOCAL_AGENT_TOKEN},timeout=8); return r.json()
+    except Exception as e: return {'ok':False,'error':str(e)}
+
 def queue_pc_action(action, params=None, wait_seconds=15):
     """Envia a ação ao agente local e aguarda o resultado real."""
     if not GATEWAY_URL or not LOCAL_AGENT_TOKEN:
@@ -252,8 +278,13 @@ def queue_pc_action(action, params=None, wait_seconds=15):
         return {'ok':False,'error':'requests não está disponível.'}
     headers={'X-Agent-Token':LOCAL_AGENT_TOKEN}
     try:
-        r=requests.post(f'{GATEWAY_URL}/agent/commands', json={'action':action,'params':params or {}}, headers=headers, timeout=10)
-        r.raise_for_status(); queued=r.json()
+        r=requests.post(f'{GATEWAY_URL}/agent/commands', json={'action':action,'params':params or {},'agent':'app','source':'app'}, headers=headers, timeout=10)
+        if r.status_code not in (200,201):
+            try: return {'ok':False,'error':r.json().get('detail',r.text)}
+            except Exception: return {'ok':False,'error':r.text}
+        queued=r.json()
+        if queued.get('pending_approval'):
+            return {'ok':False,'pending_approval':True,'approval':queued.get('approval'),'action':action,'message':'Ação enviada para aprovação de segurança.'}
         if not queued.get('ok') or not queued.get('command_id'): return queued
         command_id=queued['command_id']
         import time
@@ -318,8 +349,8 @@ def run_team(goal):
     brain=core.Brain(run_pc=queue_pc_action,llm=core.make_llm(),agent_status=get_agent_status,channel='app')
     out=brain.team_run(goal); refresh_state(); st.session_state.last_team=out; return out
 
-st.set_page_config(page_title='Jarvis V12.8',page_icon='J',layout='wide')
-st.title('Jarvis V12.8'); st.caption('Agente pessoal • Memória • Tarefas • PC • Computer Agent • Permissões • Rotinas • Voz • Dashboard • WhatsApp • Multiagentes')
+st.set_page_config(page_title='Jarvis V12.9',page_icon='J',layout='wide')
+st.title('Jarvis V12.9'); st.caption('Agente pessoal • Memória • Tarefas • PC • Computer Agent • Permissões • Rotinas • Voz • Dashboard • WhatsApp • Multiagentes')
 with st.sidebar:
     st.header('Sistema'); st.metric('Modelo',MODEL.split('/')[-1][:24]); st.metric('Skills',len(SKILLS)); st.metric('Tarefas',len(st.session_state.tasks)); st.metric('Pendentes',task_summary()['pendentes']); st.metric('Memórias locais',len(st.session_state.memory)); st.write('**PC Agent:**', 'configurado' if (GATEWAY_URL and LOCAL_AGENT_TOKEN) else 'não configurado')
     _stt=store.status(); st.caption(('✅ ' if _stt['ok'] and _stt['backend']=='supabase' else '⚠️ ')+'Armazenamento: '+_stt['backend']+' — '+_stt['detalhe'])
@@ -353,7 +384,7 @@ def save_overnight_config(cfg):
     except Exception as e:
         return {'ok':False,'error':f'Não foi possível salvar a configuração: {type(e).__name__}: {e}'}
 
-tabs=st.tabs(['Chat','Dashboard','Tarefas','Automações','Memória','Honcho','Skills','Sistema','WhatsApp','Agentes','Tools','Laboratório Noturno','Computer Agent'])
+tabs=st.tabs(['Chat','Dashboard','Tarefas','Automações','Memória','Honcho','Skills','Sistema','WhatsApp','Agentes','Tools','Laboratório Noturno','Computer Agent','Segurança'])
 with tabs[0]:
     for m in st.session_state.messages:
         with st.chat_message(m['role']): st.markdown(m['content'])
@@ -761,3 +792,72 @@ with tabs[12]:
             st.table(rows)
 
         st.info('Segurança: o Computer Agent não usa shell arbitrário e não pode apagar arquivos. Ele só usa ações já permitidas pelo agente local.')
+
+
+# V12.9 — Security & Permissions
+with tabs[13]:
+    st.subheader('Security & Permissions')
+    st.caption('Camada central que decide risco, aprovação, limites e auditoria antes das ações do Jarvis.')
+    if not GATEWAY_URL or not LOCAL_AGENT_TOKEN:
+        st.warning('Configure JARVIS_GATEWAY_URL e LOCAL_AGENT_TOKEN para usar a segurança central.')
+    else:
+        ss=get_security_status(); approvals=get_security_approvals()
+        pol=ss.get('policy',{}) if isinstance(ss,dict) else {}
+        kill=bool(ss.get('kill_switch'))
+        c1,c2,c3,c4=st.columns(4)
+        c1.metric('Estado','BLOQUEADO' if kill else 'ATIVO')
+        c2.metric('Aprovações pendentes',ss.get('pending',0))
+        c3.metric('Auditoria',ss.get('audit_entries',0))
+        c4.metric('Limite/ciclo',pol.get('max_actions_per_cycle',20))
+        st.markdown('### Kill Switch')
+        st.write('Bloqueia imediatamente novas ações do gateway e cancela aprovações pendentes.')
+        if kill:
+            if st.button('Desativar Kill Switch',type='primary',key='security_unkill'):
+                security_kill(False); st.rerun()
+        else:
+            if st.button('Ativar Kill Switch',key='security_kill'):
+                security_kill(True); st.rerun()
+
+        st.markdown('### Matriz de risco')
+        try:
+            import security as _sec
+            rows=[{'Ação':a,'Risco':_sec.risk_for(a),'Aprovação':'Sim' if _sec.needs_approval(a) else 'Não','Estado':'Bloqueada' if _sec.blocked(a) else 'Permitida'} for a in sorted(_sec.RISK)]
+            st.table(rows)
+        except Exception: pass
+
+        st.markdown('### Aprovações')
+        pending=[x for x in approvals if x.get('status')=='pending']
+        if pending:
+            for item in pending:
+                with st.container(border=True):
+                    st.write(f"**{item.get('action')}** • risco **{item.get('risk')}** • agente: {item.get('agent')}" )
+                    st.json(item.get('params',{}))
+                    a,b=st.columns(2)
+                    if a.button('Aprovar',key='approve_'+item['id'],type='primary'):
+                        out=security_decide(item['id'],'approve')
+                        if out.get('ok'): st.success('Ação aprovada e colocada na fila.')
+                        else: st.error(out.get('error','Falha ao aprovar.'))
+                        st.rerun()
+                    if b.button('Negar',key='deny_'+item['id']):
+                        out=security_decide(item['id'],'deny')
+                        st.rerun()
+        else:
+            st.info('Nenhuma ação aguardando aprovação.')
+
+        st.markdown('### Limites')
+        with st.form('security_limits'):
+            max_cycle=st.number_input('Máximo de ações por ciclo',1,100,int(pol.get('max_actions_per_cycle',20)))
+            max_agent=st.number_input('Máximo de ações por agente',1,50,int(pol.get('max_actions_per_agent',10)))
+            save=st.form_submit_button('Salvar limites')
+            if save:
+                out=security_policy_save({'max_actions_per_cycle':int(max_cycle),'max_actions_per_agent':int(max_agent)})
+                st.success('Política salva.' if out.get('ok') else out.get('error','Falha ao salvar.'))
+
+        st.markdown('### Auditoria recente')
+        try:
+            ar=requests.get(f'{GATEWAY_URL}/security/audit',headers={'X-Agent-Token':LOCAL_AGENT_TOKEN},timeout=6).json().get('audit',[])
+            if ar: st.table([{'Hora':x.get('timestamp','')[:19].replace('T',' '),'Evento':x.get('event'),'Ação':x.get('action','—'),'Risco':x.get('risk','—'),'Agente':x.get('agent','—')} for x in reversed(ar[-20:])])
+            else: st.info('Nenhum evento registrado ainda.')
+        except Exception as e: st.warning(f'Auditoria indisponível: {e}')
+
+        st.info('Regra V12.9: baixo risco pode executar automaticamente; médio/alto risco entra na fila de aprovação; ações bloqueadas continuam bloqueadas. O Laboratório Noturno pode analisar segurança, mas não recebe permissão para aplicar mudanças sozinho.')

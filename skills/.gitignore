@@ -1,5 +1,4 @@
 __pycache__/
 *.pyc
+.jarvis_*.json
 local_agent/config.json
-.jarvis_memory.json
-.jarvis_tasks.json
