@@ -13,7 +13,7 @@ PERMISSIONS = {
     'system_info': 'livre', 'list_files': 'livre', 'read_file': 'livre', 'read_log': 'livre',
     'open_app': 'livre', 'open_url': 'livre', 'search_web': 'livre',
     'open_folder': 'livre', 'open_file': 'livre',
-    'create_folder': 'livre', 'create_file': 'livre', 'append_file': 'livre',
+    'create_folder': 'livre', 'create_file': 'confirmar', 'append_file': 'confirmar',
     'copy_path': 'livre', 'move_path': 'livre', 'rename_path': 'livre',
     'delete_path': 'confirmar',
 }

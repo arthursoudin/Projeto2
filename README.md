@@ -1,7 +1,7 @@
-# Jarvis V11.9
+# Jarvis V12.4 — Core 2.0
 
-Interface + IA + memória + tarefas (Render) e um agente local que controla o seu PC
-com permissões. Nada de shell livre: cada ação é uma função fixa.
+Interface + IA + memória + tarefas (Render) e um agente local que controla o PC com permissões.
+V12.4 consolida Core 2.0, memória + referências, heartbeat do agente, dashboard e automações persistentes. Nada de shell livre: cada ação é uma função fixa.
 
 ## Como atualizar (3 passos)
 
@@ -48,5 +48,5 @@ Para colocar algo em uma pasta recém-criada diga **"dentro dela"**; sem isso fi
 
 ## Arquivos
 
-`app.py` interface · `pc_control.py` interpretador de comandos e permissões ·
-`gateway.py` ponte Render ↔ PC · `local_agent/agent.py` executor no Windows
+`app.py` interface/Core · `core.py` estado do Core 2.0 · `automation.py` regras de automação ·
+`pc_control.py` interpretador e permissões · `gateway.py` ponte Render ↔ PC · `local_agent/agent.py` executor no Windows

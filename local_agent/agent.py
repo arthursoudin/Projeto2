@@ -19,7 +19,7 @@ from urllib.parse import quote_plus, urlparse
 
 import requests
 
-VERSION = "11.9"
+VERSION = "12.4"
 BASE_DIR = pathlib.Path(__file__).resolve().parent
 CONFIG_FILE = BASE_DIR / "config.json"
 
@@ -535,6 +535,17 @@ def send_result(command_id, action, result):
     r.raise_for_status()
 
 
+def send_heartbeat(session):
+    payload = {
+        "version": VERSION,
+        "hostname": platform.node(),
+        "platform": platform.platform(),
+    }
+    r = session.post(f"{CONFIG['gateway_url']}/agent/heartbeat", json=payload, headers=headers(), timeout=15)
+    r.raise_for_status()
+    return r.json()
+
+
 def main():
     print("=" * 56)
     print(f" JARVIS LOCAL AGENT V{VERSION}")
@@ -551,6 +562,12 @@ def main():
     last_error = ""
     while True:
         try:
+            try:
+                send_heartbeat(session)
+            except requests.RequestException as e:
+                if str(e) != last_error:
+                    print(f"[GATEWAY] Heartbeat indisponível: {e}")
+                    last_error = str(e)
             r = session.get(f"{CONFIG['gateway_url']}/agent/poll", headers=headers(), timeout=20)
             if r.status_code == 401:
                 print("[ERRO] Token recusado pelo Gateway. Confira o LOCAL_AGENT_TOKEN.")

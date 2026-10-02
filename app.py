@@ -1,5 +1,7 @@
-import os, json, asyncio, datetime as dt, uuid, re
+import os, json, asyncio, datetime as dt, uuid, re, time
 from pathlib import Path
+from core import CORE_VERSION, load_state
+from automation import list_automations, create_automation, set_enabled
 import streamlit as st
 from openai import OpenAI
 import edge_tts
@@ -222,6 +224,8 @@ def execute_tool(text):
         tid=extract_task_id(text); ok=delete_task(tid) if tid else False
         return tool,(f"Tarefa #{tid} excluída." if ok else 'Informe o número da tarefa, por exemplo: apague a tarefa #3.')
     if tool=='memory':
+        structured=remember_structured(text)
+        if structured: return tool,structured
         c=text
         for p in ['lembre de','lembra de','guarde que','memorize']: c=c.lower().replace(p,'',1)
         result=save_memory_item(f'memoria_{len(st.session_state.memory)+1}',c.strip()); return tool,result
@@ -297,10 +301,41 @@ def save_memory_item(key,value):
     save_json(MEMORY_FILE,st.session_state.memory)
     return f'Memória local salva: {value}'
 
+def remember_structured(text):
+    """Extrai referências úteis de frases naturais, mantendo Honcho como memória semântica."""
+    s=text.strip()
+    m=re.search(r'(?i)meu\s+projeto\s+principal\s+(?:fica|est[aá]|está)\s+(?:na\s+)?(?:pasta|diret[oó]rio)\s+(.+)$', s)
+    if m:
+        path=m.group(1).strip(' .\"\'')
+        save_memory_item('projeto:principal', path)
+        return f'Memória salva: o projeto principal fica em {path}.'
+    return None
+
+def resolve_memory_reference(text):
+    s=text
+    aliases={
+        'meu projeto principal':'projeto:principal',
+        'projeto principal':'projeto:principal',
+    }
+    for phrase,key in aliases.items():
+        value=st.session_state.memory.get(key)
+        if value and phrase in s.lower():
+            pattern=re.compile(re.escape(phrase), re.I)
+            return pattern.sub(f'pasta {value}', s, count=1)
+    return s
+
+def local_agent_status():
+    if not GATEWAY_URL or not LOCAL_AGENT_TOKEN: return {'online':False,'configured':False}
+    try:
+        r=requests.get(f'{GATEWAY_URL}/agent/status',headers={'X-Agent-Token':LOCAL_AGENT_TOKEN},timeout=5)
+        r.raise_for_status(); data=r.json(); data['configured']=True; return data
+    except Exception as e:
+        return {'online':False,'configured':True,'error':str(e)}
+
 st.set_page_config(page_title='Jarvis V11',page_icon='J',layout='wide')
-st.title('Jarvis V11.9'); st.caption('Agente pessoal • Memória • Tarefas • PC: arquivos, apps, navegador, comandos compostos • Permissões • Voz')
+st.title('Jarvis V12.4'); st.caption('Agente pessoal • Memória • Tarefas • PC: arquivos, apps, navegador, comandos compostos • Permissões • Voz')
 with st.sidebar:
-    st.header('Sistema'); st.metric('Modelo',MODEL.split('/')[-1][:24]); st.metric('Skills',len(SKILLS)); st.metric('Tarefas',len(st.session_state.tasks)); st.metric('Pendentes',task_summary()['pendentes']); st.metric('Memórias locais',len(st.session_state.memory)); st.write('**PC Agent:**', 'configurado' if (GATEWAY_URL and LOCAL_AGENT_TOKEN) else 'não configurado')
+    st.header('Sistema'); st.metric('Core',CORE_VERSION); st.metric('Modelo',MODEL.split('/')[-1][:24]); st.metric('Skills',len(SKILLS)); st.metric('Tarefas',len(st.session_state.tasks)); st.metric('Pendentes',task_summary()['pendentes']); st.metric('Memórias locais',len(st.session_state.memory)); agent_status=local_agent_status(); st.write('**PC Agent:**', '🟢 online' if agent_status.get('online') else ('🟡 configurado' if agent_status.get('configured') else '🔴 não configurado'))
     st.write('**Honcho:**',st.session_state.honcho_status)
     if HONCHO_API_KEY: st.success('HONCHO_API_KEY configurada')
     else: st.warning('HONCHO_API_KEY não configurada')
@@ -323,7 +358,8 @@ with tabs[0]:
             elif is_cancel(prompt):
                 tool='computer'; result='O usuário cancelou a ação pendente. Nada foi executado.'
         if tool is None:
-            steps=parse_pc_commands(prompt)
+            pc_prompt=resolve_memory_reference(prompt)
+            steps=parse_pc_commands(pc_prompt)
             if steps:
                 done,status=run_pc_plan(steps); tool='computer'
                 result=json.dumps({'acoes':done,'status':status},ensure_ascii=False)
@@ -358,14 +394,25 @@ with tabs[1]:
             else: cols[4].write('Concluída')
             if t.get('recurrence'): st.caption(f"Recorrência: {t['recurrence']} • Status: {task_status_text(t)}")
 with tabs[2]:
-    st.subheader('Automações')
-    st.write('A V10 registra prazos e recorrências e verifica tarefas vencidas quando o Jarvis é acessado. Em Render, a execução em segundo plano contínua depende de um scheduler externo; esta base prepara as regras sem fingir que existe um cron persistente.')
+    st.subheader('Automações V12.4')
+    st.caption('As regras ficam persistidas. A execução recorrente depende de um scheduler/worker do ambiente; o Jarvis não finge ter um processo contínuo no Render Free.')
+    if st.button('Criar exemplo diário'):
+        create_automation('Revisar tarefas', 'daily 18:00', {'type':'task_review','notify':True})
+        st.success('Automação criada.')
+        st.rerun()
+    autos=list_automations()
+    if not autos: st.info('Nenhuma automação configurada.')
+    for a in autos:
+        c=st.columns([0.34,0.22,0.22,0.22])
+        c[0].write(f"**{a['name']}**")
+        c[1].write(a['schedule'])
+        c[2].write('🟢 ativa' if a.get('enabled') else '⚪ pausada')
+        if c[3].button('Pausar' if a.get('enabled') else 'Ativar',key=f"auto_{a['id']}"):
+            set_enabled(a['id'], not a.get('enabled')); st.rerun()
     pending=[t for t in st.session_state.tasks if t.get('status')!='done']
     if pending:
-        for t in pending:
-            status=task_status_text(t); label='Atrasada' if status=='atrasada' else 'Agendada' if t.get('due_at') else 'Sem horário'
-            st.write(f"Tarefa #{t['id']} — {t['text']} — {label}")
-    else: st.info('Nenhuma automação/tarefa pendente.')
+        st.markdown('**Pendências que as automações podem acompanhar:**')
+        for t in pending: st.write(f"#{t['id']} — {t['text']} — {task_status_text(t)}")
 with tabs[3]:
     st.subheader('Memória local de fallback'); st.json(st.session_state.memory) if st.session_state.memory else st.info('Nenhuma memória local salva.')
 with tabs[4]:
