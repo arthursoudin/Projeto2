@@ -2,7 +2,7 @@ import os, json, secrets
 from datetime import datetime, timezone
 from fastapi import FastAPI, Request, Header, HTTPException
 
-app=FastAPI(title='Jarvis Gateway',version='11.1')
+app=FastAPI(title='Jarvis Gateway',version='11.2')
 LOCAL_AGENT_TOKEN=os.getenv('LOCAL_AGENT_TOKEN','')
 COMMANDS=[]
 RESULTS=[]
@@ -17,11 +17,11 @@ def tasks():
     except Exception: return []
 
 @app.get('/')
-def root(): return {'service':'jarvis-gateway','version':'11.1'}
+def root(): return {'service':'jarvis-gateway','version':'11.2'}
 @app.get('/health')
-def health(): return {'ok':True,'service':'jarvis-gateway','version':'11.1','channels':['whatsapp'],'honcho_configured':bool(os.getenv('HONCHO_API_KEY')),'local_agent_configured':bool(LOCAL_AGENT_TOKEN),'queued_commands':len(COMMANDS)}
+def health(): return {'ok':True,'service':'jarvis-gateway','version':'11.2','channels':['whatsapp'],'honcho_configured':bool(os.getenv('HONCHO_API_KEY')),'local_agent_configured':bool(LOCAL_AGENT_TOKEN),'queued_commands':len(COMMANDS)}
 @app.get('/webhook')
-def verify_webhook(): return {'ok':True,'message':'Webhook endpoint ativo','version':'11.1'}
+def verify_webhook(): return {'ok':True,'message':'Webhook endpoint ativo','version':'11.2'}
 @app.post('/webhook')
 async def webhook(request:Request): return {'ok':True,'received':True,'memory_ready':bool(os.getenv('HONCHO_API_KEY')),'tasks':len(tasks())}
 @app.get('/tasks')

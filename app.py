@@ -251,14 +251,27 @@ async def make_audio(text,filename):
 GATEWAY_URL=os.getenv('JARVIS_GATEWAY_URL','').rstrip('/')
 LOCAL_AGENT_TOKEN=os.getenv('LOCAL_AGENT_TOKEN','')
 
-def queue_pc_action(action, params=None):
+def queue_pc_action(action, params=None, wait_seconds=15):
+    """Envia a ação ao agente local e aguarda o resultado real."""
     if not GATEWAY_URL or not LOCAL_AGENT_TOKEN:
         return {'ok':False,'error':'Configure JARVIS_GATEWAY_URL e LOCAL_AGENT_TOKEN no Render.'}
     if not requests:
         return {'ok':False,'error':'requests não está disponível.'}
+    headers={'X-Agent-Token':LOCAL_AGENT_TOKEN}
     try:
-        r=requests.post(f'{GATEWAY_URL}/agent/commands',json={'action':action,'params':params or {}},headers={'X-Agent-Token':LOCAL_AGENT_TOKEN},timeout=10)
-        return r.json()
+        r=requests.post(f'{GATEWAY_URL}/agent/commands', json={'action':action,'params':params or {}}, headers=headers, timeout=10)
+        r.raise_for_status(); queued=r.json()
+        if not queued.get('ok') or not queued.get('command_id'): return queued
+        command_id=queued['command_id']
+        import time
+        deadline=time.time()+max(3,int(wait_seconds))
+        while time.time() < deadline:
+            rr=requests.get(f'{GATEWAY_URL}/agent/results',headers=headers,timeout=10); rr.raise_for_status()
+            for item in rr.json().get('results',[]):
+                if item.get('command_id')==command_id:
+                    return {'ok':bool(item.get('ok')),'command_id':command_id,'action':action,'result':item.get('result')}
+            time.sleep(1)
+        return {'ok':False,'command_id':command_id,'action':action,'error':'O agente local não respondeu no tempo esperado. Verifique se start_agent.bat está aberto.'}
     except Exception as e:
         return {'ok':False,'error':str(e)}
 
@@ -284,7 +297,7 @@ def save_memory_item(key,value):
     return f'Memória local salva: {value}'
 
 st.set_page_config(page_title='Jarvis V11',page_icon='J',layout='wide')
-st.title('Jarvis V11.1'); st.caption('Agente pessoal • Honcho Memory • Tarefas • Controle seguro do PC • Arquivos/Pastas • Skills • Tools • Web • Edge TTS')
+st.title('Jarvis V11.2'); st.caption('Agente pessoal • Honcho Memory • Tarefas • Controle seguro do PC • Arquivos/Pastas • Skills • Tools • Web • Edge TTS • retorno real do PC')
 with st.sidebar:
     st.header('Sistema'); st.metric('Modelo',MODEL.split('/')[-1][:24]); st.metric('Skills',len(SKILLS)); st.metric('Tarefas',len(st.session_state.tasks)); st.metric('Pendentes',task_summary()['pendentes']); st.metric('Memórias locais',len(st.session_state.memory)); st.write('**PC Agent:**', 'configurado' if (GATEWAY_URL and LOCAL_AGENT_TOKEN) else 'não configurado')
     st.write('**Honcho:**',st.session_state.honcho_status)

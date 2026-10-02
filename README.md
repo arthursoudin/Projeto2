@@ -42,5 +42,8 @@ O agente não instala serviço de administrador. Ele roda como usuário normal.
 A lista é propositalmente pequena nesta primeira versão. Não há shell remoto genérico.
 
 
-## V11.1 — Controle local expandido
+## V11.2 — Controle local expandido
 Além de abrir aplicativos e criar pastas, o agente local permite abrir pastas/arquivos somente dentro de `~/Jarvis`, criar arquivos nesse espaço e consultar informações básicas do computador. Não existe execução arbitrária de shell.
+
+
+V11.2: o Gateway aguarda o resultado real do Local Agent antes de entregar a resposta ao modelo.

@@ -67,7 +67,7 @@ def main():
         print('Configure local_agent/config.json antes de iniciar.'); return 1
     url=c['gateway_url'].rstrip('/'); headers={'X-Agent-Token':c['token']}
     JARVIS_HOME.mkdir(exist_ok=True)
-    print('Jarvis Local Agent V11.1 iniciado. Ctrl+C para parar.')
+    print('Jarvis Local Agent V11.2 iniciado. Ctrl+C para parar.')
     while True:
         try:
             r=requests.get(url+'/agent/poll',headers=headers,timeout=20); r.raise_for_status()
