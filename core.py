@@ -1,4 +1,4 @@
-"""Jarvis V12.6 - núcleo sem Streamlit.
+"""Jarvis V12.7 - núcleo sem Streamlit.
 
 Usado pelo canal WhatsApp (no gateway) e pela equipe de agentes (no app).
 Guarda tarefas e memória no mesmo `store` do app: com Supabase configurado nos DOIS serviços
@@ -13,6 +13,7 @@ import unicodedata
 
 import agents
 import store
+from tool_registry import TRIGGER_MAP
 from agents import wants_team, strip_trigger
 from pc_control import parse_pc_commands, CONFIRM_ACTIONS, describe_step, is_confirm, is_cancel
 
@@ -220,20 +221,14 @@ TASK_TRIGGERS = ['crie uma tarefa', 'adiciona uma tarefa', 'adicione uma tarefa'
 
 def choose_tool(text):
     l = text.lower()
-    if any(x in l for x in ['quanto é', 'calcule', 'calcular']):
-        return 'calculator'
-    if any(x in l for x in ['que horas', 'horário', 'horario', 'data de hoje']):
-        return 'time'
-    if any(x in l for x in TASK_TRIGGERS):
-        return 'task'
+    # Tools 2.0 centraliza os gatilhos comuns; aliases legados continuam válidos.
+    for name, triggers in TRIGGER_MAP.items():
+        if any(x in l for x in triggers):
+            return {'tasks':'task','web_search':'web'}.get(name, name)
     if any(x in l for x in ['conclua a tarefa', 'concluir tarefa', 'finalize a tarefa', 'marque a tarefa']):
         return 'complete_task'
     if any(x in l for x in ['apague a tarefa', 'exclua a tarefa', 'delete a tarefa']):
         return 'delete_task'
-    if any(x in l for x in ['lembra de', 'guarde que', 'memorize']):
-        return 'memory'
-    if any(x in l for x in ['pesquise', 'procure na internet', 'pesquisa na web']):
-        return 'web'
     return None
 
 

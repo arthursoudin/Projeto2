@@ -1,4 +1,4 @@
-# Jarvis V12.6
+# Jarvis V12.7
 
 Interface + IA (Render), agente local no seu PC, rotinas agendadas, armazenamento persistente, voz,
 dashboard, **WhatsApp** e **equipe de agentes**.
@@ -14,7 +14,7 @@ dashboard, **WhatsApp** e **equipe de agentes**.
 ## Como atualizar (3 passos)
 
 1. Extraia o zip **por cima** da sua pasta `Codes` (substituir). O `.git` não é afetado.
-2. `git add .` → `git commit -m "v12.6"` → `git push`. Faça o deploy do **app** e do **gateway** no Render
+2. `git add .` → `git commit -m "v12.7"` → `git push`. Faça o deploy do **app** e do **gateway** no Render
    (os dois usam esta pasta; o gateway agora também precisa do `requirements.txt` completo).
 3. O `local_agent` **não mudou**: se ele já está aberto, não precisa reiniciar.
 
@@ -197,3 +197,57 @@ comandos compostos com "e depois". Tudo dentro de `C:\Users\<você>\Jarvis`; o l
 - O app Streamlit **não tem senha**: quem souber a URL pode usá-lo. Está previsto para a V12.9 (Segurança); até lá, não divulgue a URL.
 - O WhatsApp responde só em texto (a transcrição de áudio de entrada funciona).
 - A memória Honcho ainda não é consultada pelo canal WhatsApp (ele usa memória local, tarefas e histórico).
+
+
+## V12.7 — Tools 2.0 + monitoramento
+
+### Tools 2.0
+O catálogo central fica em `tool_registry.py`. Ele reúne nome, categoria, descrição,
+agentes permitidos e nível de risco. A execução real continua nos módulos existentes,
+com as permissões de `pc_control.py` preservadas.
+
+No Dashboard, a aba **Tools** mostra o catálogo. Isso prepara a V12.8 para o Computer Agent.
+
+### UptimeRobot + loop
+O Gateway possui dois endpoints leves:
+
+- `/health` — diagnóstico geral.
+- `/uptime` — endpoint público e simples para monitor externo.
+
+**Configuração recomendada no UptimeRobot:**
+
+1. Crie um monitor do tipo **HTTP(s)**.
+2. URL: `https://SEU-GATEWAY.onrender.com/uptime`.
+3. Use um intervalo compatível com o plano do UptimeRobot.
+4. O resultado esperado contém `"ok": true` e o status HTTP deve ser `200`.
+
+O UptimeRobot é o mecanismo externo de monitoramento/keep-alive. Não é necessário colocar
+um loop infinito dentro do FastAPI/Render, porque o serviço pode dormir e o próprio loop
+não seria confiável como mecanismo externo.
+
+Também existe `uptime_loop.py` + `start_uptime_loop.bat`. Esse loop é **opcional** e serve
+como watchdog local: ele verifica a saúde do Gateway no seu PC e mostra no terminal se está
+online ou offline. Configure antes `JARVIS_UPTIME_URL` com a URL real do `/uptime`.
+
+Exemplo no Windows (PowerShell):
+
+```powershell
+$env:JARVIS_UPTIME_URL="https://SEU-GATEWAY.onrender.com/uptime"
+python uptime_loop.py
+```
+
+Ele não substitui o UptimeRobot.
+
+## Laboratório Noturno — configuração pelo Dashboard
+
+O loop `overnight_agents.py` agora lê a configuração do Gateway. No Render, abra a aba **Laboratório Noturno** e defina:
+
+- ativo/pausado
+- intervalo entre ciclos
+- horário de início
+- horário de fim
+- limite de ciclos
+
+A configuração é salva na chave `overnight_config` do armazenamento do Jarvis. Com Supabase configurado, ela sobrevive a reinícios do Render.
+
+No PC, basta iniciar uma vez `start_overnight_loop.bat`. Depois disso, não é necessário editar o `.bat` ou usar o CMD para mudar os horários. O processo consulta o Gateway periodicamente e aplica alterações feitas no Dashboard.

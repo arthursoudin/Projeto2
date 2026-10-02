@@ -106,6 +106,7 @@ def detect_skills(text):
 from core import now, current_time, iso_now, calculator, parse_due, recurrence_from_text, clean_task_text
 import core
 from agents import wants_team, strip_trigger, AGENTS
+from tool_registry import tool_rows, tools_for_agent
 
 def next_task_id():
     return max([int(t.get('id',0)) for t in st.session_state.tasks] or [0])+1
@@ -313,12 +314,12 @@ def fmt_due(t):
     except Exception: return '—'
 
 def run_team(goal):
-    """V12.6: o Planejador divide o objetivo e os agentes especialistas executam. Equipes nunca apagam nada."""
+    """V12.7: o Planejador divide o objetivo e os agentes especialistas executam. Equipes nunca apagam nada."""
     brain=core.Brain(run_pc=queue_pc_action,llm=core.make_llm(),agent_status=get_agent_status,channel='app')
     out=brain.team_run(goal); refresh_state(); st.session_state.last_team=out; return out
 
-st.set_page_config(page_title='Jarvis V12.6',page_icon='J',layout='wide')
-st.title('Jarvis V12.6'); st.caption('Agente pessoal • Memória • Tarefas • PC • Permissões • Rotinas • Voz • Dashboard • WhatsApp • Multiagentes')
+st.set_page_config(page_title='Jarvis V12.7',page_icon='J',layout='wide')
+st.title('Jarvis V12.7'); st.caption('Agente pessoal • Memória • Tarefas • PC • Permissões • Rotinas • Voz • Dashboard • WhatsApp • Multiagentes')
 with st.sidebar:
     st.header('Sistema'); st.metric('Modelo',MODEL.split('/')[-1][:24]); st.metric('Skills',len(SKILLS)); st.metric('Tarefas',len(st.session_state.tasks)); st.metric('Pendentes',task_summary()['pendentes']); st.metric('Memórias locais',len(st.session_state.memory)); st.write('**PC Agent:**', 'configurado' if (GATEWAY_URL and LOCAL_AGENT_TOKEN) else 'não configurado')
     _stt=store.status(); st.caption(('✅ ' if _stt['ok'] and _stt['backend']=='supabase' else '⚠️ ')+'Armazenamento: '+_stt['backend']+' — '+_stt['detalhe'])
@@ -332,7 +333,27 @@ with st.sidebar:
     else: st.warning('HONCHO_API_KEY não configurada')
     if st.button('Nova conversa'): st.session_state.messages=[]; st.session_state.session_id=uuid.uuid4().hex; st.rerun()
 
-tabs=st.tabs(['Chat','Dashboard','Tarefas','Automações','Memória','Honcho','Skills','Sistema','WhatsApp','Agentes'])
+
+
+def get_overnight_config():
+    if not GATEWAY_URL or not LOCAL_AGENT_TOKEN:
+        return {'ok':False,'error':'Configure JARVIS_GATEWAY_URL e LOCAL_AGENT_TOKEN no Render.'}
+    try:
+        r=requests.get(f'{GATEWAY_URL}/overnight/config',headers={'X-Agent-Token':LOCAL_AGENT_TOKEN},timeout=6)
+        r.raise_for_status(); return r.json()
+    except Exception as e:
+        return {'ok':False,'error':f'Não foi possível consultar o laboratório: {type(e).__name__}: {e}'}
+
+def save_overnight_config(cfg):
+    if not GATEWAY_URL or not LOCAL_AGENT_TOKEN:
+        return {'ok':False,'error':'Configure JARVIS_GATEWAY_URL e LOCAL_AGENT_TOKEN no Render.'}
+    try:
+        r=requests.post(f'{GATEWAY_URL}/overnight/config',json=cfg,headers={'X-Agent-Token':LOCAL_AGENT_TOKEN},timeout=8)
+        r.raise_for_status(); return r.json()
+    except Exception as e:
+        return {'ok':False,'error':f'Não foi possível salvar a configuração: {type(e).__name__}: {e}'}
+
+tabs=st.tabs(['Chat','Dashboard','Tarefas','Automações','Memória','Honcho','Skills','Sistema','WhatsApp','Agentes','Tools','Laboratório Noturno'])
 with tabs[0]:
     for m in st.session_state.messages:
         with st.chat_message(m['role']): st.markdown(m['content'])
@@ -423,7 +444,7 @@ with tabs[1]:
         d[3].metric('Fila de comandos',s_.get('queued_commands',0) if s_.get('ok') else '—')
         st.markdown('**Canais**'); wa=s_.get('whatsapp') if s_.get('ok') else None; w=st.columns(4)
         if wa is None:
-            w[0].metric('WhatsApp','—'); st.caption('Sem dados do gateway (ou gateway antigo: faça o deploy da V12.6).')
+            w[0].metric('WhatsApp','—'); st.caption('Sem dados do gateway (ou gateway antigo: faça o deploy da V12.7).')
         else:
             w[0].metric('WhatsApp','Ativo ✅' if wa.get('configured') else 'Não configurado ⚠️')
             w[1].metric('Mensagens hoje',wa.get('messages_today',0)); w[2].metric('Último contato',wa.get('last_message_at') or '—'); w[3].metric('Números autorizados',wa.get('allowed_count',0))
@@ -521,7 +542,7 @@ with tabs[8]:
     chk=st.session_state.get('wa_check'); wa=(chk or {}).get('whatsapp') if (chk or {}).get('ok') else None
     if chk is None: st.info('Clique em "Verificar agora" para consultar o gateway.')
     elif not chk.get('ok'): st.error(chk.get('error') or 'Gateway sem resposta.')
-    elif wa is None: st.warning('O gateway ainda é uma versão antiga. Faça o deploy da V12.6 no serviço do gateway.')
+    elif wa is None: st.warning('O gateway ainda é uma versão antiga. Faça o deploy da V12.7 no serviço do gateway.')
     else:
         (st.success if wa.get('configured') else st.warning)('WhatsApp ativo.' if wa.get('configured') else 'Faltam variáveis no gateway.')
         import whatsapp as _wa
@@ -537,7 +558,7 @@ with tabs[8]:
 5. Em *WhatsApp > Configuração > Webhook*, cole a URL acima e o mesmo `WHATSAPP_VERIFY_TOKEN`; inscreva-se no campo **messages**.
 6. Mande **/ajuda** para o número de teste. Para tarefas e memória aparecerem iguais aqui e no WhatsApp, use o **mesmo Supabase** nos dois serviços.''')
 with tabs[9]:
-    st.subheader('Dashboard de Multiagentes (V12.6)')
+    st.subheader('Dashboard de Multiagentes (V12.7)')
     st.caption('Visão operacional da equipe: agentes disponíveis, execução recente, histórico, taxa de sucesso e etapas do Planejador.')
 
     last=st.session_state.get('last_team') or store.load('team_last',{})
@@ -592,3 +613,94 @@ with tabs[9]:
 
     st.markdown('### Como usar')
     st.code('/equipe organize meus estudos de Python: crie a pasta Estudos e uma tarefa para amanhã às 9h')
+
+
+# V12.7 — laboratório noturno + configuração remota
+with tabs[11]:
+    st.subheader('Laboratório Noturno')
+    st.caption('Configure o loop diretamente pelo Render. O processo local lê esta configuração e executa os ciclos no seu PC.')
+    cfg=get_overnight_config()
+    current=cfg.get('config',{}) if cfg.get('ok') else {}
+    if not current:
+        current={'enabled':False,'interval_minutes':30,'start_time':'22:00','end_time':'07:00','max_cycles':0}
+
+    st.markdown('### Controle do loop')
+    c1,c2,c3,c4=st.columns(4)
+    enabled= c1.toggle('Laboratório ativo',value=bool(current.get('enabled',False)),key='night_enabled')
+    interval=c2.number_input('Intervalo (minutos)',min_value=1,max_value=1440,value=int(current.get('interval_minutes',30)),step=5,key='night_interval')
+    start_time=c3.text_input('Início',value=str(current.get('start_time','22:00')),key='night_start',help='Formato HH:MM. Ex.: 22:00')
+    end_time=c4.text_input('Fim',value=str(current.get('end_time','07:00')),key='night_end',help='Formato HH:MM. Ex.: 07:00')
+    max_cycles=st.number_input('Máximo de ciclos (0 = sem limite)',min_value=0,max_value=10000,value=int(current.get('max_cycles',0)),step=1,key='night_max')
+    st.caption('Exemplo: início 22:00, fim 07:00 e intervalo de 60 minutos. O horário atravessa a meia-noite normalmente.')
+    if st.button('💾 Salvar configuração do laboratório',type='primary',key='save_night_config'):
+        try:
+            import re as _re
+            if not _re.fullmatch(r'([01]\d|2[0-3]):[0-5]\d',start_time.strip()) or not _re.fullmatch(r'([01]\d|2[0-3]):[0-5]\d',end_time.strip()):
+                raise ValueError('Use horários no formato HH:MM, por exemplo 22:00 e 07:00.')
+            result=save_overnight_config({'enabled':enabled,'interval_minutes':int(interval),'start_time':start_time.strip(),'end_time':end_time.strip(),'max_cycles':int(max_cycles)})
+            if result.get('ok'): st.success('Configuração salva no Gateway. O loop local aplicará a mudança automaticamente.')
+            else: st.error(result.get('error','Não foi possível salvar.'))
+        except Exception as e: st.error(str(e))
+
+    st.markdown('### Status')
+    status_cfg=get_overnight_config()
+    live=status_cfg.get('config',current) if status_cfg.get('ok') else current
+    a,b,c,d=st.columns(4)
+    a.metric('Configuração','ATIVA' if live.get('enabled') else 'PAUSADA')
+    b.metric('Intervalo',f"{live.get('interval_minutes',30)} min")
+    c.metric('Janela',f"{live.get('start_time','22:00')} → {live.get('end_time','07:00')}")
+    d.metric('Máx. ciclos',live.get('max_cycles',0) or '∞')
+
+    from pathlib import Path as _NightPath
+    _lab=_NightPath(__file__).resolve().parent/'overnight_workspace'; _state=_lab/'state.json'
+    try: _ns=json.loads(_state.read_text(encoding='utf-8')) if _state.exists() else {}
+    except Exception: _ns={}
+    _hist=_ns.get('history',[]) if isinstance(_ns.get('history',[]),list) else []
+    _running=_ns.get('status')=='running'
+    a,b,c,d=st.columns(4)
+    a.metric('Processo local','RODANDO' if _running else (_ns.get('status') or 'parado'))
+    b.metric('Ciclos executados',_ns.get('cycle',0))
+    last=_hist[-1] if _hist else {}
+    c.metric('Testes','OK' if last.get('tests_ok') else ('FALHA' if last else '—'))
+    d.metric('Sintaxe','OK' if last.get('compile_ok') else ('FALHA' if last else '—'))
+
+    st.markdown('### Agentes do laboratório')
+    try:
+        from overnight_agents import ROLES
+        st.table([{'Agente':k.replace('_',' ').title(),'Função':v} for k,v in ROLES.items()])
+    except Exception as e: st.warning(f'Não foi possível carregar os agentes: {e}')
+    if _hist:
+        st.markdown('### Últimos ciclos'); st.table(list(reversed(_hist[-12:])))
+    reports=sorted((_lab/'reports').glob('cycle_*.json'),reverse=True) if (_lab/'reports').exists() else []
+    if reports:
+        st.markdown('### Último relatório')
+        try:
+            _rep=json.loads(reports[0].read_text(encoding='utf-8'))
+            st.write('**Ciclo:**',_rep.get('cycle'),'• **Data:**',_rep.get('timestamp'))
+            st.write('**Qualidade:**'); st.write(_rep.get('quality',''))
+            st.write('**Segurança:**'); st.write(_rep.get('security',''))
+            st.write('**Red Team defensivo:**'); st.write(_rep.get('red_team',''))
+            st.write('**Melhorias propostas:**'); st.write(_rep.get('improvements',''))
+            with st.expander('Exemplos encontrados na web'): st.json(_rep.get('web_examples',[]))
+        except Exception as e: st.error(f'Erro ao ler relatório: {e}')
+    st.info('Você precisa deixar o processo local do laboratório iniciado uma vez no PC. Depois disso, horários, intervalo, ativação e limite de ciclos podem ser alterados por esta tela, sem voltar ao CMD.')
+
+with tabs[10]:
+    st.subheader('Tools 2.0')
+    st.caption('Catálogo central de ferramentas. A execução continua sujeita às permissões e aos agentes autorizados.')
+    import tool_registry as _tr
+    rows=_tr.tool_rows()
+    c1,c2,c3=st.columns(3)
+    c1.metric('Tools',len(rows))
+    c2.metric('Categorias',len(set(r['Categoria'] for r in rows)))
+    c3.metric('Agentes com tools',len(set(a for r in rows for a in r['Agentes'].split(', '))))
+    st.table(rows)
+    st.markdown('### Tools por agente')
+    for aid,av in AGENTS.items():
+        tools=tools_for_agent(aid)
+        with st.expander(f"{av['icone']} {av['nome']} — {len(tools)} tool(s)"):
+            if not tools:
+                st.info('Nenhuma tool registrada.')
+            else:
+                st.table([{'ID':k,'Nome':v['nome'],'Categoria':v['categoria'],'Risco':v['risco']} for k,v in tools.items()])
+    st.info('V12.8: Computer Agent poderá usar este catálogo como camada de descoberta, mantendo as permissões atuais.')

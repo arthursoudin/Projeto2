@@ -3,15 +3,22 @@ from datetime import datetime, timezone
 from fastapi import FastAPI, Request, Header, HTTPException, BackgroundTasks
 from fastapi.responses import PlainTextResponse
 
-import whatsapp, core, voice_io
+import whatsapp, core, voice_io, store
 
-VERSION='12.5.0'
+VERSION='12.7.0'
 app=FastAPI(title='Jarvis Gateway',version=VERSION)
 LOCAL_AGENT_TOKEN=os.getenv('LOCAL_AGENT_TOKEN','')
 COMMANDS=[]
 RESULTS=[]
 AGENT={'last_seen':0.0,'info':{}}   # estado do agente local (para o dashboard)
 HISTORY=[]                          # últimas medições de CPU/RAM
+OVERNIGHT_DEFAULT={'enabled':False,'interval_minutes':30,'start_time':'22:00','end_time':'07:00','max_cycles':0}
+
+def overnight_config():
+    cfg=store.load('overnight_config',OVERNIGHT_DEFAULT.copy())
+    if not isinstance(cfg,dict): cfg=OVERNIGHT_DEFAULT.copy()
+    out=OVERNIGHT_DEFAULT.copy(); out.update(cfg); return out
+
 INFO_KEYS={'version','computer','cpu_percent','ram_total_gb','ram_livre_gb','ram_em_uso_percent','disco_total_gb','disco_livre_gb','ligado_ha','rotinas_ativas','proxima_rotina','jarvis_folder'}
 
 def auth(token):
@@ -24,6 +31,33 @@ def tasks():
 def root(): return {'service':'jarvis-gateway','version':VERSION}
 @app.get('/health')
 def health(): return {'ok':True,'service':'jarvis-gateway','version':VERSION,'channels':['whatsapp'],'whatsapp_configured':whatsapp.configured(),'honcho_configured':bool(os.getenv('HONCHO_API_KEY')),'local_agent_configured':bool(LOCAL_AGENT_TOKEN),'queued_commands':len(COMMANDS)}
+
+@app.get('/uptime')
+def uptime():
+    # Endpoint público e leve para monitores externos, como UptimeRobot.
+    return {'ok':True,'service':'jarvis-gateway','version':VERSION,'timestamp':datetime.now(timezone.utc).isoformat(),'monitor':'uptimerobot'}
+@app.get('/overnight/config')
+def get_overnight_config(x_agent_token: str|None = Header(default=None)):
+    if not auth(x_agent_token): raise HTTPException(status_code=401,detail='Não autorizado')
+    return {'ok':True,'config':overnight_config()}
+
+@app.post('/overnight/config')
+async def set_overnight_config(request:Request, x_agent_token: str|None = Header(default=None)):
+    if not auth(x_agent_token): raise HTTPException(status_code=401,detail='Não autorizado')
+    body=await request.json()
+    if not isinstance(body,dict): raise HTTPException(status_code=400,detail='Configuração inválida')
+    cfg=OVERNIGHT_DEFAULT.copy(); cfg.update(overnight_config())
+    cfg['enabled']=bool(body.get('enabled',cfg['enabled']))
+    cfg['interval_minutes']=max(1,min(1440,int(body.get('interval_minutes',cfg['interval_minutes']))))
+    cfg['max_cycles']=max(0,min(10000,int(body.get('max_cycles',cfg['max_cycles']))))
+    import re
+    for key in ('start_time','end_time'):
+        value=str(body.get(key,cfg[key])).strip()
+        if not re.fullmatch(r'([01]\d|2[0-3]):[0-5]\d',value): raise HTTPException(status_code=400,detail=f'{key} inválido; use HH:MM')
+        cfg[key]=value
+    store.save('overnight_config',cfg)
+    return {'ok':True,'config':cfg}
+
 @app.get('/tasks')
 def list_tasks(x_agent_token: str|None = Header(default=None)):
     if not auth(x_agent_token): raise HTTPException(status_code=401,detail='Agente não autorizado')

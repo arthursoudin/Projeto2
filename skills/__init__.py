@@ -1,4 +1,4 @@
-"""Catálogo de Skills do Jarvis V12.6.
+"""Catálogo de Skills do Jarvis V12.7.
 
 As skills são descritas em skills/catalog.json para que o catálogo possa
 ser ampliado sem alterar o núcleo do Jarvis.
