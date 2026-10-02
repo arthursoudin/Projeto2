@@ -21,6 +21,10 @@ MAX_STEPS = 6
 MAX_INSTRUCTION = 400
 
 AGENTS = {
+    'computador': {
+        'icone': '💻', 'nome': 'Computer Agent',
+        'descricao': 'Planeja e executa sequências seguras no computador usando apenas as ferramentas permitidas, verificando o resultado de cada etapa.',
+    },
     'pc': {
         'icone': '🖥️', 'nome': 'Agente do PC',
         'descricao': 'Cria pastas/arquivos, abre apps e sites, lista arquivos, agenda rotinas no PC. '

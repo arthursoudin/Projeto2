@@ -16,6 +16,7 @@ import store
 from tool_registry import TRIGGER_MAP
 from agents import wants_team, strip_trigger
 from pc_control import parse_pc_commands, CONFIRM_ACTIONS, describe_step, is_confirm, is_cancel
+from computer_agent import execute as execute_computer
 
 PENDING_TTL = 300          # segundos para responder "sim/não" a uma confirmação
 
@@ -352,7 +353,7 @@ class Brain:
     def __init__(self, run_pc, llm=None, agent_status=None, channel='whatsapp'):
         self.run_pc, self.llm, self.agent_status, self.channel = run_pc, llm, agent_status, channel
         self.pending = {}
-        self.team = agents.Team(self._llm, {'pc': self._h_pc, 'tarefas': self._h_tarefas, 'memoria': self._h_memoria,
+        self.team = agents.Team(self._llm, {'pc': self._h_pc, 'computador': self._h_computador, 'tarefas': self._h_tarefas, 'memoria': self._h_memoria,
                                            'pesquisa': self._h_pesquisa, 'redator': self._h_redator})
 
     # ---- LLM
@@ -438,6 +439,19 @@ class Brain:
         if status == 'blocked':
             return False, 'Equipes não apagam nada. Peça a exclusão direto ao Jarvis (ele pede confirmação).'
         return status == 'ok', format_done(done)
+
+    def _h_computador(self, instr, ctx):
+        out = execute_computer(instr, self.run_pc)
+        try:
+            hist = store.load('computer_agent_history', [])
+            if not isinstance(hist, list): hist = []
+            hist.append({'instrucao': instr[:300], 'ok': bool(out.get('ok')), 'trace': out.get('trace', [])})
+            store.save('computer_agent_history', hist[-30:])
+        except Exception:
+            pass
+        if out.get('ok'):
+            return True, '💻 Computer Agent: ' + str(out.get('summary')) + '\n' + '\n'.join(f"{x['step']}. {'OK' if x['ok'] else 'FALHOU'} — {x['description']}" for x in out.get('trace', []))
+        return False, '💻 Computer Agent interrompido: ' + str(out.get('error') or 'falha')
 
     def _h_tarefas(self, instr, ctx):
         text = instr if choose_tool(instr) == 'task' else 'crie uma tarefa ' + instr

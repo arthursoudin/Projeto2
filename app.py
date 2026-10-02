@@ -318,8 +318,8 @@ def run_team(goal):
     brain=core.Brain(run_pc=queue_pc_action,llm=core.make_llm(),agent_status=get_agent_status,channel='app')
     out=brain.team_run(goal); refresh_state(); st.session_state.last_team=out; return out
 
-st.set_page_config(page_title='Jarvis V12.7',page_icon='J',layout='wide')
-st.title('Jarvis V12.7'); st.caption('Agente pessoal • Memória • Tarefas • PC • Permissões • Rotinas • Voz • Dashboard • WhatsApp • Multiagentes')
+st.set_page_config(page_title='Jarvis V12.8',page_icon='J',layout='wide')
+st.title('Jarvis V12.8'); st.caption('Agente pessoal • Memória • Tarefas • PC • Computer Agent • Permissões • Rotinas • Voz • Dashboard • WhatsApp • Multiagentes')
 with st.sidebar:
     st.header('Sistema'); st.metric('Modelo',MODEL.split('/')[-1][:24]); st.metric('Skills',len(SKILLS)); st.metric('Tarefas',len(st.session_state.tasks)); st.metric('Pendentes',task_summary()['pendentes']); st.metric('Memórias locais',len(st.session_state.memory)); st.write('**PC Agent:**', 'configurado' if (GATEWAY_URL and LOCAL_AGENT_TOKEN) else 'não configurado')
     _stt=store.status(); st.caption(('✅ ' if _stt['ok'] and _stt['backend']=='supabase' else '⚠️ ')+'Armazenamento: '+_stt['backend']+' — '+_stt['detalhe'])
@@ -353,7 +353,7 @@ def save_overnight_config(cfg):
     except Exception as e:
         return {'ok':False,'error':f'Não foi possível salvar a configuração: {type(e).__name__}: {e}'}
 
-tabs=st.tabs(['Chat','Dashboard','Tarefas','Automações','Memória','Honcho','Skills','Sistema','WhatsApp','Agentes','Tools','Laboratório Noturno'])
+tabs=st.tabs(['Chat','Dashboard','Tarefas','Automações','Memória','Honcho','Skills','Sistema','WhatsApp','Agentes','Tools','Laboratório Noturno','Computer Agent'])
 with tabs[0]:
     for m in st.session_state.messages:
         with st.chat_message(m['role']): st.markdown(m['content'])
@@ -704,3 +704,60 @@ with tabs[10]:
             else:
                 st.table([{'ID':k,'Nome':v['nome'],'Categoria':v['categoria'],'Risco':v['risco']} for k,v in tools.items()])
     st.info('V12.8: Computer Agent poderá usar este catálogo como camada de descoberta, mantendo as permissões atuais.')
+
+
+# V12.8 — Computer Agent
+with tabs[12]:
+    st.subheader('Computer Agent')
+    st.caption('Planeja, executa e verifica sequências de ações seguras no seu PC. Ações destrutivas continuam bloqueadas.')
+
+    try:
+        from computer_agent import plan_instruction, execute as execute_computer
+        import computer_agent as _ca
+    except Exception as e:
+        st.error(f'Computer Agent indisponível: {e}')
+    else:
+        c1,c2,c3=st.columns(3)
+        c1.metric('Modo','Seguro')
+        c2.metric('Ações permitidas',len(_ca.SAFE_ACTIONS))
+        c3.metric('Ações bloqueadas',len(_ca.BLOCKED_ACTIONS))
+
+        instruction=st.text_area('O que o Computer Agent deve fazer?', placeholder='Ex.: crie a pasta ProjetoTeste e depois crie o arquivo README.txt dentro dela', height=100, key='computer_instruction')
+        instruction_text = instruction if isinstance(instruction, str) else ''
+        if instruction_text.strip():
+            plan, plan_error=plan_instruction(instruction_text)
+            st.markdown('### Plano detectado')
+            if plan:
+                st.table([{'#':i+1,'Ação':a,'Parâmetros':json.dumps(p,ensure_ascii=False)} for i,(a,p) in enumerate(plan)])
+            else:
+                st.warning(plan_error)
+
+        run=st.button('▶️ Executar Computer Agent',type='primary',disabled=not bool(instruction_text.strip()),key='run_computer_agent')
+        if run:
+            if not GATEWAY_URL or not LOCAL_AGENT_TOKEN:
+                st.error('Configure JARVIS_GATEWAY_URL e LOCAL_AGENT_TOKEN no Render.')
+            else:
+                with st.spinner('Computer Agent executando e verificando as etapas...'):
+                    result=execute_computer(instruction_text, queue_pc_action)
+                st.session_state['computer_last']=result
+                if result.get('ok'): st.success(result.get('summary','Execução concluída.'))
+                else: st.error(result.get('error','Execução interrompida.'))
+
+        last_ca=st.session_state.get('computer_last')
+        if last_ca:
+            st.markdown('### Última execução')
+            for item in last_ca.get('trace',[]):
+                status='✅' if item.get('ok') else '❌'
+                with st.expander(f"{status} Etapa {item.get('step')}: {item.get('description','')}", expanded=not item.get('ok',False)):
+                    st.write('**Verificação:**', item.get('verification',{}).get('detalhe','—'))
+                    st.json(item.get('result',{}))
+
+        history=store.load('computer_agent_history',[])
+        if isinstance(history,list) and history:
+            st.markdown('### Histórico do Computer Agent')
+            rows=[]
+            for h in reversed(history[-15:]):
+                rows.append({'Instrução':str(h.get('instrucao',''))[:100],'Status':'✅' if h.get('ok') else '❌','Etapas':len(h.get('trace') or [])})
+            st.table(rows)
+
+        st.info('Segurança: o Computer Agent não usa shell arbitrário e não pode apagar arquivos. Ele só usa ações já permitidas pelo agente local.')

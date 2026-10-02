@@ -13,9 +13,9 @@ TOOLS = {
     'memory': {'nome':'Memória','categoria':'memoria','descricao':'Salva informações na memória local.','agentes':['memoria','redator'],'risco':'baixo'},
     'memory_search': {'nome':'Busca na memória','categoria':'memoria','descricao':'Consulta memória disponível ao Jarvis.','agentes':['memoria','redator'],'risco':'baixo'},
     'tasks': {'nome':'Tarefas','categoria':'produtividade','descricao':'Cria e consulta tarefas e prazos.','agentes':['tarefas','redator'],'risco':'baixo'},
-    'computer': {'nome':'Computador','categoria':'pc','descricao':'Executa ações permitidas no PC por meio do agente local.','agentes':['pc'],'risco':'moderado'},
-    'filesystem': {'nome':'Arquivos','categoria':'pc','descricao':'Cria, lê, lista, move, copia e renomeia arquivos dentro da área segura.','agentes':['pc'],'risco':'moderado'},
-    'schedule': {'nome':'Rotinas','categoria':'automacao','descricao':'Cria e controla rotinas permitidas no agente local.','agentes':['pc'],'risco':'moderado'},
+    'computer': {'nome':'Computador','categoria':'pc','descricao':'Executa ações permitidas no PC por meio do agente local.','agentes':['pc','computador'],'risco':'moderado'},
+    'filesystem': {'nome':'Arquivos','categoria':'pc','descricao':'Cria, lê, lista, move, copia e renomeia arquivos dentro da área segura.','agentes':['pc','computador'],'risco':'moderado'},
+    'schedule': {'nome':'Rotinas','categoria':'automacao','descricao':'Cria e controla rotinas permitidas no agente local.','agentes':['pc','computador'],'risco':'moderado'},
 }
 
 TRIGGER_MAP = {

@@ -314,3 +314,23 @@ class TestGateway(InTmp):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_computer_agent_plans_and_blocks_delete():
+    from computer_agent import plan_instruction, execute
+    plan, err = plan_instruction('crie a pasta V128Teste e depois crie o arquivo teste.txt dentro dela')
+    assert plan and not err
+    assert all(a not in {'delete_path', 'schedule_invalid'} for a, _ in plan)
+    blocked, _ = plan_instruction('apague a pasta V128Teste')
+    assert blocked is None
+
+
+def test_computer_agent_stops_on_failed_verification():
+    from computer_agent import execute
+    calls=[]
+    def runner(action, params):
+        calls.append(action)
+        return {'ok': False, 'error': 'falhou'}
+    out = execute('crie a pasta V128Teste', runner)
+    assert out['ok'] is False
+    assert len(calls) == 1

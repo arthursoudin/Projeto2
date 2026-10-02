@@ -1,4 +1,4 @@
-# Jarvis V12.7
+# Jarvis V12.8
 
 Interface + IA (Render), agente local no seu PC, rotinas agendadas, armazenamento persistente, voz,
 dashboard, **WhatsApp** e **equipe de agentes**.
@@ -10,6 +10,7 @@ dashboard, **WhatsApp** e **equipe de agentes**.
 | 12.3 | **Dashboard completo**: agente, canais, tarefas, rotinas, armazenamento |
 | 12.4 | Rotinas agendadas + armazenamento persistente (Supabase) |
 | 12.5 | **Multiagentes**: Planejador + especialistas (`/equipe`) |
+| 12.8 | **Computer Agent**: planejamento seguro, execução sequencial e verificação no PC |
 
 ## Como atualizar (3 passos)
 
