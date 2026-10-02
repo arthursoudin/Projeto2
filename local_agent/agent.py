@@ -5,6 +5,7 @@ apenas ações permitidas dentro de ~/Jarvis e devolve o resultado real.
 Não existe shell remoto: cada ação é uma função fixa abaixo.
 """
 import datetime
+from datetime import timedelta
 import json
 import os
 import pathlib
@@ -13,13 +14,14 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import webbrowser
 from urllib.parse import quote_plus, urlparse
 
 import requests
 
-VERSION = "12.4"
+VERSION = "12.4.2"
 BASE_DIR = pathlib.Path(__file__).resolve().parent
 CONFIG_FILE = BASE_DIR / "config.json"
 
@@ -459,18 +461,6 @@ def _uptime_info():
         return {}
 
 
-def _cpu_info():
-    try:
-        import psutil
-        return {
-            "cpu_uso_percent": round(float(psutil.cpu_percent(interval=0.35)), 1),
-            "cpu_threads_logicos": psutil.cpu_count(logical=True),
-            "cpu_nucleos_fisicos": psutil.cpu_count(logical=False),
-        }
-    except Exception as e:
-        return {"cpu_erro": str(e), "cpu_threads_logicos": os.cpu_count()}
-
-
 def system_info():
     info = {
         "ok": True, "computer": platform.node(), "os": platform.platform(), "system": platform.system(),
@@ -479,7 +469,6 @@ def system_info():
         "cpu_threads": os.cpu_count(), "python": platform.python_version(),
         "home": str(pathlib.Path.home()), "jarvis_folder": str(JARVIS_HOME.resolve()),
     }
-    info.update(_cpu_info())
     info.update(_memory_info())
     info.update(_disk_info())
     info.update(_uptime_info())
@@ -494,6 +483,305 @@ def read_log(lines=20):
         return _ok(f"Últimas {n} linhas do log", linhas=LOG_FILE.read_text(encoding="utf-8").splitlines()[-n:])
     except Exception as e:
         return _err(f"Erro ao ler log: {e}")
+
+
+# ------------------------------------------------------------ rotinas (V12.4)
+# As rotinas ficam neste PC (~/Jarvis/.jarvis_agenda.json) e rodam mesmo que o Render esteja dormindo.
+AGENDA_FILE = JARVIS_HOME / ".jarvis_agenda.json"
+_agenda_lock = threading.RLock()
+MAX_ROUTINES = 30
+MAX_STEPS = 8
+MIN_INTERVAL = 5          # minutos
+GRACE_SECONDS = 300       # se o PC estava desligado há mais que isso, a execução é considerada perdida
+DAY_NAMES = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"]
+NOT_IN_ROUTINES = {"delete_path", "schedule_add", "schedule_list", "schedule_remove", "schedule_toggle", "read_log"}
+
+
+def _agenda_load():
+    try:
+        data = json.loads(AGENDA_FILE.read_text(encoding="utf-8")) if AGENDA_FILE.exists() else []
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def _agenda_save(items):
+    tmp = AGENDA_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(items, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(AGENDA_FILE)
+
+
+def _hm(text):
+    h, m = str(text).split(":")
+    h, m = int(h), int(m)
+    if not (0 <= h <= 23 and 0 <= m <= 59):
+        raise ValueError("Horário inválido.")
+    return h, m
+
+
+def next_after(when, after):
+    """Primeira ocorrência estritamente depois de `after` (None se não houver)."""
+    kind = when.get("kind")
+    if kind == "once":
+        at = datetime.datetime.fromisoformat(when["at"])
+        return at if at > after else None
+    if kind == "interval":
+        return after + timedelta(minutes=int(when["minutes"]))
+    h, m = _hm(when["time"])
+    if kind == "daily":
+        cand = after.replace(hour=h, minute=m, second=0, microsecond=0)
+        return cand if cand > after else cand + timedelta(days=1)
+    if kind == "weekly":
+        days = set(int(d) for d in when["days"])
+        for i in range(8):
+            cand = (after + timedelta(days=i)).replace(hour=h, minute=m, second=0, microsecond=0)
+            if cand > after and cand.weekday() in days:
+                return cand
+    return None
+
+
+def describe_when(when):
+    kind = when.get("kind")
+    if kind == "daily":
+        return f"todo dia às {when['time']}"
+    if kind == "weekly":
+        return f"{', '.join(DAY_NAMES[int(d)] for d in sorted(when['days']))} às {when['time']}"
+    if kind == "interval":
+        mi = int(when["minutes"])
+        return f"a cada {mi // 60} h" if mi % 60 == 0 else f"a cada {mi} min"
+    if kind == "once":
+        return f"uma vez em {datetime.datetime.fromisoformat(when['at']):%d/%m %H:%M}"
+    return "?"
+
+
+def _normalize_when(when, now):
+    if not isinstance(when, dict):
+        raise ValueError("Horário da rotina ausente.")
+    kind = when.get("kind")
+    if kind == "once" and "in_minutes" in when:
+        mins = int(when["in_minutes"])
+        if not 1 <= mins <= 10080:
+            raise ValueError("Use de 1 minuto até 7 dias.")
+        return {"kind": "once", "at": (now + timedelta(minutes=mins)).isoformat(timespec="seconds")}
+    if kind == "once":
+        h, m = _hm(when.get("time"))
+        cand = now.replace(hour=h, minute=m, second=0, microsecond=0)
+        day = when.get("day", "auto")
+        if day == "tomorrow":
+            cand += timedelta(days=1)
+        elif cand <= now:
+            if day == "today":
+                raise ValueError(f"Hoje às {h:02d}:{m:02d} já passou. Diga 'amanhã' ou outro horário.")
+            cand += timedelta(days=1)
+        return {"kind": "once", "at": cand.isoformat(timespec="seconds")}
+    if kind == "interval":
+        mins = int(when.get("minutes", 0))
+        if not MIN_INTERVAL <= mins <= 1440:
+            raise ValueError(f"O intervalo deve ficar entre {MIN_INTERVAL} minutos e 24 horas.")
+        return {"kind": "interval", "minutes": mins}
+    if kind == "daily":
+        _hm(when.get("time"))
+        return {"kind": "daily", "time": when["time"]}
+    if kind == "weekly":
+        _hm(when.get("time"))
+        days = sorted({int(d) for d in when.get("days", []) if 0 <= int(d) <= 6})
+        if not days:
+            raise ValueError("Nenhum dia da semana informado.")
+        return {"kind": "weekly", "days": days, "time": when["time"]}
+    raise ValueError("Tipo de rotina desconhecido.")
+
+
+def _validate_steps(steps):
+    if not isinstance(steps, list) or not steps:
+        raise ValueError("A rotina precisa de pelo menos um passo.")
+    if len(steps) > MAX_STEPS:
+        raise ValueError(f"Máximo de {MAX_STEPS} passos por rotina.")
+    clean = []
+    for st in steps:
+        action = st.get("action") if isinstance(st, dict) else None
+        if action not in ACTIONS or action in NOT_IN_ROUTINES:
+            raise ValueError(f"Ação não permitida em rotinas: {action}")
+        params = st.get("params") if isinstance(st.get("params"), dict) else {}
+        clean.append({"action": action, "params": params})
+    return clean
+
+
+def schedule_add(when, steps, resumo=""):
+    try:
+        now = datetime.datetime.now()
+        spec = _normalize_when(when, now)
+        steps = _validate_steps(steps)
+        with _agenda_lock:
+            items = _agenda_load()
+            if len(items) >= MAX_ROUTINES:
+                return _err(f"Limite de {MAX_ROUTINES} rotinas. Remova alguma antes.")
+            nxt = next_after(spec, now)
+            if nxt is None:
+                return _err("Esse horário já passou.")
+            rid = max([int(i.get("id", 0)) for i in items] or [0]) + 1
+            items.append({"id": rid, "when": spec, "steps": steps, "resumo": str(resumo or "")[:200],
+                          "enabled": True, "next_run": nxt.isoformat(timespec="seconds"), "last_run": None,
+                          "last_ok": None, "last_msg": "", "runs": 0, "created": now.isoformat(timespec="seconds")})
+            _agenda_save(items)
+        return _ok(f"Rotina #{rid} criada: {describe_when(spec)}. Próxima execução: {nxt:%d/%m %H:%M}.",
+                   id=rid, quando=describe_when(spec), proxima=f"{nxt:%d/%m %H:%M}")
+    except Exception as e:
+        return _err(f"Não consegui criar a rotina: {e}")
+
+
+def schedule_list():
+    with _agenda_lock:
+        items = _agenda_load()
+    rows = []
+    for r in items:
+        nr = r.get("next_run")
+        lr = r.get("last_run")
+        rows.append({
+            "id": r.get("id"), "quando": describe_when(r.get("when", {})), "o_que_faz": r.get("resumo", ""),
+            "ativa": bool(r.get("enabled")),
+            "proxima": datetime.datetime.fromisoformat(nr).strftime("%d/%m %H:%M") if nr else "-",
+            "ultima_execucao": datetime.datetime.fromisoformat(lr).strftime("%d/%m %H:%M") if lr else "-",
+            "ultimo_resultado": ("ok" if r.get("last_ok") else r.get("last_msg") or "erro") if lr or r.get("last_msg") else "-",
+            "execucoes": r.get("runs", 0),
+        })
+    return _ok(f"{len(rows)} rotina(s)", rotinas=rows)
+
+
+def schedule_remove(rid):
+    try:
+        rid = int(rid)
+        with _agenda_lock:
+            items = _agenda_load()
+            keep = [i for i in items if int(i.get("id", 0)) != rid]
+            if len(keep) == len(items):
+                return _err(f"Não existe a rotina #{rid}.")
+            _agenda_save(keep)
+        return _ok(f"Rotina #{rid} removida.")
+    except Exception as e:
+        return _err(f"Erro ao remover rotina: {e}")
+
+
+def schedule_toggle(rid, enabled):
+    try:
+        rid = int(rid)
+        with _agenda_lock:
+            items = _agenda_load()
+            for r in items:
+                if int(r.get("id", 0)) == rid:
+                    if enabled:
+                        nxt = next_after(r["when"], datetime.datetime.now())
+                        if nxt is None:
+                            return _err(f"A rotina #{rid} era de uma vez só e já passou. Crie outra.")
+                        r["next_run"] = nxt.isoformat(timespec="seconds")
+                    r["enabled"] = bool(enabled)
+                    _agenda_save(items)
+                    return _ok(f"Rotina #{rid} {'ativada' if enabled else 'pausada'}.")
+        return _err(f"Não existe a rotina #{rid}.")
+    except Exception as e:
+        return _err(f"Erro ao alterar rotina: {e}")
+
+
+def _advance(r, now):
+    nxt = next_after(r["when"], now)
+    if r["when"].get("kind") == "once" or nxt is None:
+        r["enabled"], r["next_run"] = False, None
+    else:
+        r["next_run"] = nxt.isoformat(timespec="seconds")
+
+
+def scheduler_tick(now=None):
+    """Executa as rotinas vencidas. Chamado a cada segundo por uma thread."""
+    now = now or datetime.datetime.now()
+    with _agenda_lock:
+        items = _agenda_load()
+        changed = False
+        for r in items:
+            if not r.get("enabled") or not r.get("next_run"):
+                continue
+            due = datetime.datetime.fromisoformat(r["next_run"])
+            if due > now:
+                continue
+            changed = True
+            if (now - due).total_seconds() > GRACE_SECONDS:
+                r["last_ok"], r["last_msg"] = False, f"perdida: o agente estava desligado às {due:%d/%m %H:%M}"
+                print(f"[ROTINA #{r['id']}] pulada ({r['last_msg']})")
+                _advance(r, now)
+                continue
+            ok, msg = True, ""
+            for step in r.get("steps", []):
+                res = execute_action(step["action"], step.get("params"))
+                if not res.get("ok"):
+                    ok, msg = False, res.get("error", "erro")
+                    break
+            r["last_run"], r["last_ok"], r["last_msg"] = now.isoformat(timespec="seconds"), ok, msg
+            r["runs"] = int(r.get("runs", 0)) + 1
+            print(f"[ROTINA #{r['id']}] {'OK' if ok else 'ERRO: ' + msg} - {r.get('resumo', '')}"[:200])
+            _advance(r, now)
+        if changed:
+            _agenda_save(items)
+
+
+def scheduler_loop():
+    while True:
+        try:
+            scheduler_tick()
+        except Exception as e:
+            print(f"[ROTINAS] erro: {e}")
+        time.sleep(1)
+
+
+# ------------------------------------------------------------ batimento (dashboard)
+_cpu_prev = None
+
+
+def _cpu_percent():
+    """Uso de CPU (%) desde a última medição. None na 1ª vez ou fora do Windows."""
+    global _cpu_prev
+    try:
+        import ctypes
+
+        class FT(ctypes.Structure):
+            _fields_ = [("lo", ctypes.c_uint32), ("hi", ctypes.c_uint32)]
+
+        i, k, u = FT(), FT(), FT()
+        if not ctypes.windll.kernel32.GetSystemTimes(ctypes.byref(i), ctypes.byref(k), ctypes.byref(u)):
+            return None
+        val = lambda f: (f.hi << 32) | f.lo
+        idle, total = val(i), val(k) + val(u)      # no Windows, "kernel" já inclui o tempo ocioso
+        prev, _cpu_prev = _cpu_prev, (idle, total)
+        if not prev or total - prev[1] <= 0:
+            return None
+        return round(100 * (1 - (idle - prev[0]) / (total - prev[1])), 1)
+    except Exception:
+        return None
+
+
+def build_heartbeat():
+    hb = {"version": VERSION, "computer": platform.node(), "cpu_percent": _cpu_percent(),
+          "jarvis_folder": str(JARVIS_HOME.resolve())}
+    for part in (_memory_info(), _disk_info(), _uptime_info()):
+        hb.update({k: v for k, v in part.items() if not k.endswith("_erro") and k != "disco"})
+    try:
+        with _agenda_lock:
+            ativas = [r for r in _agenda_load() if r.get("enabled") and r.get("next_run")]
+        hb["rotinas_ativas"] = len(ativas)
+        if ativas:
+            nxt = min(ativas, key=lambda r: r["next_run"])
+            hb["proxima_rotina"] = {"quando": datetime.datetime.fromisoformat(nxt["next_run"]).strftime("%d/%m %H:%M"),
+                                    "resumo": nxt.get("resumo", "")}
+    except Exception:
+        pass
+    return hb
+
+
+def heartbeat_loop():
+    while True:
+        try:
+            requests.post(f"{CONFIG['gateway_url']}/agent/heartbeat", json=build_heartbeat(),
+                          headers=headers(), timeout=10)
+        except Exception:
+            pass          # sem barulho: o poll principal já avisa se o gateway cair
+        time.sleep(10)
 
 
 # --------------------------------------------------------------- despacho
@@ -514,6 +802,10 @@ ACTIONS = {
     "delete_path": lambda p: delete_path(p.get("name"), p.get("confirmed")),
     "system_info": lambda p: system_info(),
     "read_log": lambda p: read_log(p.get("lines", 20)),
+    "schedule_add": lambda p: schedule_add(p.get("when"), p.get("steps"), p.get("resumo", "")),
+    "schedule_list": lambda p: schedule_list(),
+    "schedule_remove": lambda p: schedule_remove(p.get("id")),
+    "schedule_toggle": lambda p: schedule_toggle(p.get("id"), p.get("enabled", True)),
 }
 ALLOWED_ACTIONS = set(ACTIONS)
 
@@ -536,7 +828,7 @@ def execute_action(action, params):
         result = ACTIONS[action](params)
     except Exception as e:
         result = _err(f"Erro inesperado: {e}")
-    if action != "read_log":
+    if action not in ("read_log", "schedule_list"):
         log_action(action, params, result)
     return result
 
@@ -546,17 +838,6 @@ def send_result(command_id, action, result):
                       json={"command_id": command_id, "action": action, "result": result},
                       headers=headers(), timeout=15)
     r.raise_for_status()
-
-
-def send_heartbeat(session):
-    payload = {
-        "version": VERSION,
-        "hostname": platform.node(),
-        "platform": platform.platform(),
-    }
-    r = session.post(f"{CONFIG['gateway_url']}/agent/heartbeat", json=payload, headers=headers(), timeout=15)
-    r.raise_for_status()
-    return r.json()
 
 
 def main():
@@ -569,18 +850,16 @@ def main():
         return
     print(f"[INFO] Gateway: {CONFIG['gateway_url']}")
     print(f"[INFO] Pasta segura: {JARVIS_HOME}")
+    threading.Thread(target=scheduler_loop, daemon=True).start()
+    threading.Thread(target=heartbeat_loop, daemon=True).start()
+    n_rot = sum(1 for r in _agenda_load() if r.get("enabled"))
+    print(f"[INFO] Rotinas ativas: {n_rot}")
     print("[OK] Aguardando comandos... (Ctrl+C para sair)\n")
 
     session = requests.Session()
     last_error = ""
     while True:
         try:
-            try:
-                send_heartbeat(session)
-            except requests.RequestException as e:
-                if str(e) != last_error:
-                    print(f"[GATEWAY] Heartbeat indisponível: {e}")
-                    last_error = str(e)
             r = session.get(f"{CONFIG['gateway_url']}/agent/poll", headers=headers(), timeout=20)
             if r.status_code == 401:
                 print("[ERRO] Token recusado pelo Gateway. Confira o LOCAL_AGENT_TOKEN.")
