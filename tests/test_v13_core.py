@@ -6,7 +6,7 @@ import devices
 class V13CoreTests(unittest.TestCase):
     def test_capabilities(self):
         c = orchestrator.capabilities()
-        self.assertEqual(c["version"], "13.0.0")
+        self.assertEqual(c["version"], "13.3.1")
         self.assertIn("multi_pc", c["future_ready"])
 
     def test_mission_lifecycle(self):

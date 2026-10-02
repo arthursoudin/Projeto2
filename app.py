@@ -107,7 +107,7 @@ from core import now, current_time, iso_now, calculator, parse_due, recurrence_f
 import core
 from agents import wants_team, strip_trigger, AGENTS
 from tool_registry import tool_rows, tools_for_agent
-import orchestrator, devices
+import orchestrator, devices, live_operations
 
 def next_task_id():
     return max([int(t.get('id',0)) for t in st.session_state.tasks] or [0])+1
@@ -396,6 +396,14 @@ section[data-testid="stSidebar"] { background:#02080d; border-right:1px solid va
 .jarvis-event:last-child { border-bottom:0; }
 .jarvis-event b { color:#ccebf2; }
 .jarvis-footer { display:flex; justify-content:space-between; margin-top:.45rem; color:#456372; font-size:.55rem; letter-spacing:.1em; text-transform:uppercase; }
+.jarvis-live-panel { overflow:hidden; }
+.jarvis-live-current { display:flex; align-items:center; gap:.65rem; padding:.35rem 0 .5rem; }
+.jarvis-live-ring { width:12px; height:12px; border-radius:50%; border:2px solid var(--cyan); box-shadow:0 0 12px rgba(32,217,255,.7); flex:0 0 auto; }
+.jarvis-live-agent { color:#dffbff; font-size:.72rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+.jarvis-live-action { color:#8ca9b7; font-size:.65rem; margin-top:.18rem; line-height:1.25; }
+.jarvis-live-meta { color:#486c7b; font-size:.52rem; letter-spacing:.08em; margin-top:.2rem; }
+.jarvis-live-badge { color:var(--cyan); font-size:.52rem; letter-spacing:.1em; border:1px solid rgba(32,217,255,.25); padding:.12rem .3rem; }
+.jarvis-live-feed { max-height:105px; overflow:hidden; }
 .jarvis-hero { display:none; }
 .jarvis-card { border:1px solid var(--line); border-radius:8px; padding:.8rem; background:rgba(4,18,28,.55); min-height:80px; }
 .jarvis-label { color:var(--muted); font-size:.7rem; text-transform:uppercase; letter-spacing:.08em; }
@@ -409,7 +417,20 @@ section[data-testid="stSidebar"] { background:#02080d; border-right:1px solid va
 .jarvis-node-running { border-color:rgba(250,204,21,.65); box-shadow:0 0 18px rgba(250,204,21,.12); } .jarvis-node-error { border-color:rgba(248,113,113,.75); } .jarvis-node-ok { border-color:rgba(134,239,172,.55); } .jarvis-node-idle { border-color:rgba(148,163,184,.28); }
 @media (max-width:1100px) { .jarvis-hud-grid { grid-template-columns:1fr; } .jarvis-center { order:-1; min-height:440px; } .jarvis-radar { width:360px; height:360px; } .jarvis-bottom { grid-template-columns:1fr; } .jarvis-nav { display:none; } }
 </style>
-<div class="jarvis-topbar"><div class="jarvis-brand"><span>J</span>ARVIS // COMMAND OS</div><div class="jarvis-nav"><b>CORE</b><span>AGENTS</span><span>DEVICES</span><span>MISSIONS</span><span>MEMORY</span><span>SECURITY</span></div><div class="jarvis-clock">SYSTEM ONLINE • V13.2.1</div></div>
+<style>
+:root { --accent:#ff3b30; --accent2:#ff6259; }
+.hud-dock-label{font-size:.62rem;letter-spacing:.25em;color:#ff8b84;margin:.1rem 0 .35rem;text-transform:uppercase}
+.hud-status-card,.hud-ai-panel,.hud-feed,.hud-chat{border:1px solid rgba(255,59,48,.20);background:linear-gradient(180deg,rgba(16,7,8,.82),rgba(5,7,9,.88));box-shadow:inset 0 0 24px rgba(255,59,48,.025),0 0 20px rgba(255,59,48,.025);border-radius:8px;padding:.7rem;margin-bottom:.65rem}
+.hud-section,.hud-feed-title{color:#ff6259;font-size:.58rem;letter-spacing:.18em;text-transform:uppercase;margin-bottom:.45rem}
+.hud-row{display:flex;justify-content:space-between;border-bottom:1px solid rgba(255,59,48,.08);padding:.35rem 0;color:#7d7777;font-size:.66rem}.hud-row:last-child{border-bottom:0}.hud-row b{color:#e9dede}.hud-row .ok{color:#67e8a0}.hud-row .warn{color:#f6d365}.hud-row .bad{color:#ff6259}
+.hud-live-line{display:flex;align-items:center;gap:.45rem;color:#eee;font-size:.68rem}.hud-live-dot{width:8px;height:8px;border-radius:50%;background:#ff3b30;box-shadow:0 0 12px #ff3b30}.hud-badge{border:1px solid rgba(255,59,48,.3);color:#ff8b84;padding:.12rem .32rem;font-size:.5rem;letter-spacing:.1em;margin-left:auto}.hud-action{color:#aaa;font-size:.64rem;line-height:1.35;margin-top:.45rem}.hud-meta{color:#635c5c;font-size:.51rem;letter-spacing:.08em;margin-top:.35rem}
+.hud-ai-title{display:flex;justify-content:space-between;color:#ff6259;font-size:.58rem;letter-spacing:.16em;margin-bottom:.45rem}.hud-ai-panel{min-height:190px}.hud-ai-orb{display:flex;justify-content:center;margin:.25rem 0 .55rem}.hud-ai-orb-core{width:68px;height:68px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,59,48,.5);background:radial-gradient(circle,#32100e 0,#080607 70%);box-shadow:0 0 28px rgba(255,59,48,.18),inset 0 0 18px rgba(255,59,48,.08);color:#ffb2ad;font-size:1.4rem;font-weight:800}.hud-ai-state{display:flex;align-items:center;color:#eee;font-size:.7rem}.hud-ai-state .hud-badge{margin-left:.5rem}.hud-ai-action{color:#918989;font-size:.62rem;text-align:center;margin:.35rem auto}.hud-loop{display:flex;justify-content:center;align-items:center;gap:.35rem;color:#a99b9b;font-size:.48rem;letter-spacing:.08em;margin-top:.65rem}.hud-loop span{border:1px solid rgba(255,59,48,.18);padding:.25rem .35rem}.hud-loop i{color:#ff6259;font-style:normal}.hud-feed{font-size:.58rem;color:#777;min-height:34px}.hud-feed span{color:#555;margin-right:.4rem}.hud-feed b{color:#cbbbbb;margin-right:.35rem}.hud-feed em{font-style:normal;color:#ff6259;font-size:.5rem}.hud-feed p{margin:.18rem 0 0;color:#8c8181}.hud-chat small{color:#ff6259;font-size:.48rem;letter-spacing:.12em}.hud-chat p{color:#b6aaaa;font-size:.62rem;margin:.2rem 0 .45rem;white-space:pre-wrap}
+.hud-center-sphere-wrap{position:relative;min-height:330px;display:flex;flex-direction:column;align-items:center;justify-content:center;margin-top:-10px}.hud-sphere{width:min(31vw,330px);height:min(31vw,330px);min-width:250px;min-height:250px;border-radius:50%;position:relative;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle,rgba(255,59,48,.10) 0 16%,rgba(255,59,48,.035) 17% 35%,transparent 36%),repeating-radial-gradient(circle,transparent 0 34px,rgba(255,59,48,.13) 35px 36px);border:1px solid rgba(255,59,48,.28);box-shadow:0 0 50px rgba(255,59,48,.09),inset 0 0 45px rgba(255,59,48,.05);overflow:hidden}.hud-sphere:before{content:'';position:absolute;inset:10%;border-radius:50%;border:1px dashed rgba(255,59,48,.28)}.hud-sphere:after{content:'';position:absolute;width:1px;height:92%;background:linear-gradient(transparent,#ff3b30,transparent);box-shadow:0 0 10px #ff3b30;transform:rotate(28deg);opacity:.55}.hud-sphere-core{width:105px;height:105px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(circle,#190908,#030405 72%);border:1px solid rgba(255,59,48,.55);box-shadow:0 0 28px rgba(255,59,48,.18),inset 0 0 22px rgba(255,59,48,.1);z-index:3}.hud-sphere-core strong{font-size:2rem;color:#f5e9e9;text-shadow:0 0 15px rgba(255,59,48,.45)}.hud-sphere-core span{font-size:.48rem;color:#ff6259;letter-spacing:.18em}.hud-ring{position:absolute;border:1px solid rgba(255,59,48,.22);border-radius:50%}.hud-ring.r1{width:74%;height:74%}.hud-ring.r2{width:54%;height:54%;border-color:rgba(255,98,89,.17)}.hud-ring.r3{width:88%;height:88%;border-style:dashed;opacity:.55}.hud-scan{position:absolute;inset:0;border-radius:50%;background:conic-gradient(from 0deg,transparent 0 72%,rgba(255,59,48,.22) 76%,transparent 82%);animation:hudspin 8s linear infinite}.hud-sphere-caption{color:#665b5b;font-size:.52rem;letter-spacing:.16em;margin-top:.45rem;text-transform:uppercase}.hud-bottom{display:flex;justify-content:center;gap:1rem;flex-wrap:wrap;margin:.2rem 0 .3rem;color:#685d5d;font-size:.49rem;letter-spacing:.12em}.hud-bottom span:first-child{color:#72dca4}@keyframes hudspin{to{transform:rotate(360deg)}}
+button[kind="secondary"]{border-color:rgba(255,59,48,.18)!important}button[kind="secondary"]:hover{border-color:rgba(255,59,48,.55)!important;color:#ff8b84!important}
+@media (max-width:900px){.hud-center-sphere-wrap{order:2}.hud-ai-title{margin-top:.4rem}.hud-sphere{width:280px;height:280px}}
+</style>
+
+<div class="jarvis-topbar"><div class="jarvis-brand"><span>J</span>ARVIS // COMMAND OS</div><div class="jarvis-nav"><b>CORE</b><span>AGENTS</span><span>DEVICES</span><span>MISSIONS</span><span>MEMORY</span><span>SECURITY</span></div><div class="jarvis-clock">SYSTEM ONLINE • V13.3.1</div></div>
 ''', unsafe_allow_html=True)
 st.title('JARVIS // COMMAND OS'); st.caption('Central de comando • Agentes • Dispositivos • Missões • Memória • Segurança • Automação')
 with st.sidebar:
@@ -924,7 +945,7 @@ with tabs[13]:
         st.info('Regra V12.9: baixo risco pode executar automaticamente; médio/alto risco entra na fila de aprovação; ações bloqueadas continuam bloqueadas. O Laboratório Noturno pode analisar segurança, mas não recebe permissão para aplicar mudanças sozinho.')
 
 
-# V13.2.1 — Futuristic HUD Command Center
+# V13.3.1 — Compact Futuristic Command Center
 with tabs[14]:
     try: _agent = get_agent_status()
     except Exception: _agent = {'ok':False,'online':False,'info':{}}
@@ -936,6 +957,9 @@ with tabs[14]:
     except Exception: _missions = []
     try: _events = orchestrator.events()
     except Exception: _events = []
+    try: _live = live_operations.snapshot(limit=8)
+    except Exception: _live = {'current':None,'running':[],'recent':[],'event_count':len(_events)}
+
     _running=[m for m in _missions if m.get('status')=='running']
     _failed=[m for m in _missions if m.get('status')=='failed']
     _done=[m for m in _missions if m.get('status') in ('done','completed','success')]
@@ -944,62 +968,108 @@ with tabs[14]:
     _online=bool(_agent.get('online'))
     _pending=int(_sec.get('pending',0) or 0)
     _kill=bool(_sec.get('kill_switch'))
-    _last_event=_events[-1] if _events else {}
-    _last_goal=str(_running[-1].get('goal','MISSÃO EM EXECUÇÃO'))[:54] if _running else ('Nenhuma missão ativa' if not _missions else str(_missions[-1].get('goal','Última missão'))[:54])
-    _last_event_text=str(_last_event.get('event','Sistema aguardando operação'))[:54]
-    _last_event_time=str(_last_event.get('timestamp',''))[11:19] if _last_event.get('timestamp') else '--:--:--'
-    _cpu=_info.get('cpu_percent'); _ram=_info.get('ram_em_uso_percent')
-    st.markdown('<div class="jarvis-hud"><div class="jarvis-hud-grid">',unsafe_allow_html=True)
-    st.markdown('<div class="jarvis-stack">',unsafe_allow_html=True)
-    st.markdown(f'''<div class="jarvis-panel"><div class="jarvis-panel-title">SYSTEM // STATUS</div>
-    <div class="jarvis-status-row"><span>Core</span><strong class="jarvis-green"><span class="jarvis-dot"></span>ONLINE</strong></div>
-    <div class="jarvis-status-row"><span>Local Agent</span><strong class="{'jarvis-green' if _online else 'jarvis-red'}"><span class="jarvis-dot"></span>{'ONLINE' if _online else 'OFFLINE'}</strong></div>
-    <div class="jarvis-status-row"><span>Security</span><strong class="{'jarvis-red' if _kill else 'jarvis-green'}">{'LOCKED' if _kill else 'ACTIVE'}</strong></div>
-    <div class="jarvis-status-row"><span>Approvals</span><strong class="jarvis-yellow">{_pending:02d}</strong></div></div>''',unsafe_allow_html=True)
-    st.markdown(f'''<div class="jarvis-panel"><div class="jarvis-panel-title">CURRENT MISSION</div><div class="jarvis-panel-text"><strong>{_last_goal}</strong><br><br>Running: {len(_running):02d}<br>Completed: {len(_done):02d}<br>Failed: {len(_failed):02d}</div></div>''',unsafe_allow_html=True)
-    st.markdown(f'''<div class="jarvis-panel"><div class="jarvis-panel-title">SYSTEM TELEMETRY</div>
-    <div class="jarvis-status-row"><span>CPU</span><strong class="jarvis-cyan">{f'{_cpu:.0f}%' if isinstance(_cpu,(int,float)) else '--'}</strong></div>
-    <div class="jarvis-status-row"><span>RAM</span><strong class="jarvis-cyan">{f'{_ram:.0f}%' if isinstance(_ram,(int,float)) else '--'}</strong></div>
-    <div class="jarvis-status-row"><span>Devices</span><strong class="jarvis-cyan">{len(_online_devices)}/{len(_devices)}</strong></div>
-    <div class="jarvis-status-row"><span>Events</span><strong class="jarvis-cyan">{len(_events):04d}</strong></div></div>''',unsafe_allow_html=True)
-    st.markdown('</div>',unsafe_allow_html=True)
-    st.markdown(f'''<div class="jarvis-center"><div class="jarvis-radar"><div class="jarvis-orbit one"></div><div class="jarvis-orbit two"></div><div class="jarvis-core"><div class="big">{len(_running):02d}</div><div class="small">ACTIVE MISSIONS</div></div><div class="jarvis-chipbar"><span class="jarvis-chip">PLANNER</span><span class="jarvis-chip">AGENTS</span><span class="jarvis-chip">QA</span><span class="jarvis-chip">SECURITY</span><span class="jarvis-chip">LOCAL</span></div></div></div>''',unsafe_allow_html=True)
-    st.markdown('<div class="jarvis-stack">',unsafe_allow_html=True)
-    st.markdown('<div class="jarvis-panel"><div class="jarvis-panel-title">AGENT NETWORK</div>',unsafe_allow_html=True)
-    _agent_names=[]
-    for ev in _events[-80:]:
-        data=ev.get('data',{}) if isinstance(ev.get('data',{}),dict) else {}
-        for key in ('agent','agent_id','executor','worker'):
-            value=data.get(key) or ev.get(key)
-            if value and str(value) not in _agent_names: _agent_names.append(str(value))
-    if not _agent_names: _agent_names=list(AGENTS.keys())
-    for name in _agent_names[:7]:
-        lname=str(name).lower(); state='IDLE'; cls='jarvis-cyan'
-        for ev in reversed(_events[-100:]):
-            data=ev.get('data',{}) if isinstance(ev.get('data',{}),dict) else {}
-            candidate=str(data.get('agent') or data.get('agent_id') or ev.get('agent') or '').lower()
-            if candidate==lname or lname in candidate or candidate in lname:
-                status=str(ev.get('status') or data.get('status') or '').lower()
-                if status in ('running','executing','active'): state='RUNNING'; cls='jarvis-yellow'
-                elif status in ('error','failed','failure'): state='ERROR'; cls='jarvis-red'
-                elif status in ('done','completed','success','ok'): state='READY'; cls='jarvis-green'
-                break
-        st.markdown(f'<div class="jarvis-status-row"><span>{name}</span><strong class="{cls}"><span class="jarvis-dot"></span>{state}</strong></div>',unsafe_allow_html=True)
-    st.markdown('</div>',unsafe_allow_html=True)
-    st.markdown(f'''<div class="jarvis-panel"><div class="jarvis-panel-title">LATEST ACTIVITY</div>
-    <div class="jarvis-event"><span>{_last_event_time}</span><span><b>{_last_event_text}</b><br>Global timeline</span></div>
-    <div class="jarvis-event"><span>SYS</span><span><b>V13.2.1 HUD</b><br>Command interface active</span></div></div>''',unsafe_allow_html=True)
-    st.markdown(f'''<div class="jarvis-panel"><div class="jarvis-panel-title">CONNECTED DEVICES</div><div class="jarvis-panel-text"><strong>{len(_online_devices)}</strong> online / <strong>{len(_devices)}</strong> registered.<br><br>{(_info.get('computer') or 'Local device')}<br>Agent v{_info.get('version','?')}</div></div>''',unsafe_allow_html=True)
-    st.markdown('</div></div>',unsafe_allow_html=True)
-    st.markdown('<div class="jarvis-bottom">',unsafe_allow_html=True)
-    st.markdown(f'<div class="jarvis-panel"><div class="jarvis-panel-title">MISSIONS</div><div class="jarvis-mini-value">{len(_missions):04d}</div><div class="jarvis-panel-text">{len(_running)} running • {len(_done)} completed • {len(_failed)} failed</div></div>',unsafe_allow_html=True)
-    st.markdown(f'<div class="jarvis-panel"><div class="jarvis-panel-title">MEMORY / SKILLS</div><div class="jarvis-mini-value">{len(st.session_state.memory):04d} / {len(SKILLS):02d}</div><div class="jarvis-panel-text">Long-term memory and skill catalog connected</div></div>',unsafe_allow_html=True)
-    st.markdown(f'<div class="jarvis-panel"><div class="jarvis-panel-title">EVENT STREAM</div><div class="jarvis-mini-value">{len(_events):04d}</div><div class="jarvis-panel-text">Latest: {_last_event_text}</div></div>',unsafe_allow_html=True)
-    st.markdown('</div>',unsafe_allow_html=True)
-    st.markdown('<div class="jarvis-footer"><span>JARVIS COMMAND OS // OBSERVABILITY MODE</span><span>PERMISSION MANAGER ENFORCED // NO DIRECT BYPASS</span><span>CORE 13.2.1</span></div></div>',unsafe_allow_html=True)
-    st.caption('O HUD é uma camada visual. As ações continuam passando pelo Core, Permission Manager e Local Agent; a interface não cria permissões novas.')
+    _current=_live.get('current') or {}
+    _cur_status=str(_current.get('status','idle')).upper()
+    _cur_agent=str(_current.get('agent') or 'SYSTEM')[:24]
+    _cur_action=str(_current.get('instruction') or _current.get('result') or 'Aguardando uma missão...')[:100]
+    _cur_dur=_current.get('duration_ms')
+    _dur_text=f'{float(_cur_dur)/1000:.1f}s' if isinstance(_cur_dur,(int,float)) else '--'
 
+    # Dock superior: recursos ficam guardados em botões compactos e abrem em popover.
+    st.markdown('<div class="hud-dock-label">JARVIS // COMMAND CENTER</div>', unsafe_allow_html=True)
+    d1,d2,d3,d4,d5,d6,d7,d8=st.columns([1.05,1.05,1.05,1.05,1.05,1.05,1.05,1.35])
+    with d1:
+        with st.popover('SYSTEM'):
+            st.markdown('### SYSTEM')
+            st.write('Core: **ONLINE**')
+            st.write(f"Local Agent: **{'ONLINE' if _online else 'OFFLINE'}**")
+            st.write(f"CPU: **{_info.get('cpu_percent','—')}%**")
+            st.write(f"RAM: **{_info.get('ram_em_uso_percent','—')}%**")
+            st.write(f"Devices: **{len(_online_devices)}/{len(_devices)}**")
+    with d2:
+        with st.popover('TASKS'):
+            st.markdown('### TASKS')
+            ts=task_summary(); st.metric('Pendentes',ts['pendentes']); st.metric('Atrasadas',ts['atrasadas'])
+            for t in st.session_state.tasks[-6:]:
+                st.write(f"#{t.get('id')} • {task_status_text(t)} • {t.get('text','')[:45]}")
+    with d3:
+        with st.popover('AGENTS'):
+            st.markdown('### AGENTS')
+            for name in list(AGENTS.keys())[:10]: st.write(f"● {name}")
+    with d4:
+        with st.popover('TOOLS'):
+            st.markdown('### TOOLS')
+            rows=tool_rows()
+            for r in rows[:12]:
+                name = r.get('name',r.get('tool','tool')) if isinstance(r,dict) else str(r)
+                st.write(f"● {name}")
+    with d5:
+        with st.popover('MEMORY'):
+            st.markdown('### MEMORY')
+            st.write(f"Local memories: **{len(st.session_state.memory)}**")
+            st.write(f"Honcho: **{st.session_state.honcho_status}**")
+            st.write(f"Skills: **{len(SKILLS)}**")
+    with d6:
+        with st.popover('DEVICES'):
+            st.markdown('### DEVICES')
+            if not _devices: st.caption('Nenhum dispositivo registrado.')
+            for dv in _devices[:10]:
+                st.write(f"● {dv.get('name') or dv.get('device_id','device')} — {dv.get('status','unknown')}")
+    with d7:
+        with st.popover('SECURITY'):
+            st.markdown('### SECURITY')
+            st.write(f"Kill Switch: **{'ON' if _kill else 'OFF'}**")
+            st.write(f"Approvals: **{_pending}**")
+            st.caption('Permission Manager continua sendo a camada que autoriza ações.')
+    with d8:
+        with st.popover('MISSIONS'):
+            st.markdown('### MISSIONS')
+            st.metric('Running',len(_running)); st.metric('Done',len(_done)); st.metric('Failed',len(_failed))
+            if _missions: st.caption(str(_missions[-1].get('goal',''))[:120])
 
+    left,right=st.columns([1.0,1.25])
+    with left:
+        st.markdown(f'''<div class="hud-status-card"><div class="hud-section">SYSTEM STATUS</div>
+        <div class="hud-row"><span>CORE</span><b class="ok">ONLINE</b></div>
+        <div class="hud-row"><span>LOCAL AGENT</span><b class="{'ok' if _online else 'bad'}">{'ONLINE' if _online else 'OFFLINE'}</b></div>
+        <div class="hud-row"><span>SECURITY</span><b class="{'bad' if _kill else 'ok'}">{'LOCKED' if _kill else 'ACTIVE'}</b></div>
+        <div class="hud-row"><span>APPROVALS</span><b class="warn">{_pending:02d}</b></div></div>''',unsafe_allow_html=True)
+        st.markdown(f'''<div class="hud-status-card"><div class="hud-section">TELEMETRY</div>
+        <div class="hud-row"><span>CPU</span><b>{_info.get('cpu_percent','—')}%</b></div>
+        <div class="hud-row"><span>RAM</span><b>{_info.get('ram_em_uso_percent','—')}%</b></div>
+        <div class="hud-row"><span>DEVICES</span><b>{len(_online_devices)}/{len(_devices)}</b></div>
+        <div class="hud-row"><span>EVENTS</span><b>{len(_events):04d}</b></div></div>''',unsafe_allow_html=True)
+        st.markdown(f'''<div class="hud-status-card"><div class="hud-section">CURRENT OPERATION</div>
+        <div class="hud-live-line"><span class="hud-live-dot"></span><b>{_cur_agent}</b><span class="hud-badge">{_cur_status}</span></div>
+        <div class="hud-action">{_cur_action}</div><div class="hud-meta">DURATION {_dur_text} • EVENTS {_live.get('event_count',0):04d}</div></div>''',unsafe_allow_html=True)
+
+    with right:
+        st.markdown('<div class="hud-ai-title"><span>JARVIS AI</span><span>AGENT LOOP • TOOLS</span></div>',unsafe_allow_html=True)
+        st.markdown(f'''<div class="hud-ai-panel"><div class="hud-ai-orb"><div class="hud-ai-orb-core">J</div></div>
+        <div class="hud-ai-state"><b>{_cur_agent}</b><span class="hud-badge">{_cur_status}</span></div>
+        <div class="hud-ai-action">{_cur_action}</div>
+        <div class="hud-loop"><span>PLANNER</span><i>→</i><span>AGENT</span><i>→</i><span>TOOLS</span><i>→</i><span>VERIFY</span></div></div>''',unsafe_allow_html=True)
+        st.markdown('<div class="hud-feed-title">LIVE FEED</div>',unsafe_allow_html=True)
+        recent=_live.get('recent') or []
+        if not recent:
+            st.markdown('<div class="hud-feed">Aguardando operações do Jarvis...</div>',unsafe_allow_html=True)
+        else:
+            for x in recent[:5]:
+                st.markdown(f'''<div class="hud-feed"><span>{str(x.get('started_at',''))[11:19] or '--:--:--'}</span><b>{str(x.get('agent') or 'SYSTEM')[:18]}</b><em>{str(x.get('status',''))[:10].upper()}</em><p>{str(x.get('instruction') or x.get('result') or '')[:90]}</p></div>''',unsafe_allow_html=True)
+        ai_prompt=st.text_input('Comando para Jarvis',key='hud_ai_prompt',placeholder='Fale com o Jarvis...',label_visibility='collapsed')
+        if st.button('ENVIAR PARA JARVIS',key='hud_ai_send',use_container_width=True) and ai_prompt.strip():
+            try:
+                tool,tool_result=execute_tool(ai_prompt.strip())
+                memory_context=honcho_context(ai_prompt.strip())
+                answer=ask_llm(ai_prompt.strip(),tool_result,memory_context)
+                st.session_state.hud_ai_history=st.session_state.get('hud_ai_history',[])[-5:]+[{'q':ai_prompt.strip(),'a':answer}]
+                st.rerun()
+            except Exception as e: st.error(f'Erro no Jarvis: {e}')
+        for item in st.session_state.get('hud_ai_history',[])[-3:]:
+            st.markdown(f'''<div class="hud-chat"><small>VOCÊ</small><p>{item['q'][:180]}</p><small>JARVIS</small><p>{item['a'][:420]}</p></div>''',unsafe_allow_html=True)
+
+    st.markdown(f'''<div class="hud-center-sphere-wrap"><div class="hud-sphere"><div class="hud-scan"></div><div class="hud-sphere-core"><strong>{len(_running):02d}</strong><span>ACTIVE</span></div><div class="hud-ring r1"></div><div class="hud-ring r2"></div><div class="hud-ring r3"></div></div><div class="hud-sphere-caption">JARVIS CORE • {len(_running):02d} ACTIVE MISSIONS • V13.3.1</div></div>''',unsafe_allow_html=True)
+    st.markdown(f'''<div class="hud-bottom"><span>CORE ONLINE</span><span>{len(_missions):04d} MISSIONS</span><span>{len(SKILLS):02d} SKILLS</span><span>{len(_events):04d} EVENTS</span><span>PERMISSION MANAGER ENFORCED</span></div>''',unsafe_allow_html=True)
 # V13.2 — Agent Map
 with tabs[15]:
     st.subheader('Agent Map — V13.2')
@@ -1106,6 +1176,6 @@ with tabs[15]:
 
     with st.expander('Como o mapa funciona'):
         st.write('O mapa é uma camada de observabilidade. Ele lê missões e eventos registrados pelo Core e apresenta o estado conhecido dos agentes. Ele não executa comandos diretamente e não altera permissões.')
-        st.write('Próxima evolução: V13.3 — Live Operations, com acompanhamento mais detalhado da ação atual, ferramenta, duração e resultado.')
+        st.write('V13.3 adiciona Live Operations ao Command Center, sem criar uma nova aba para preservar espaço visual.')
 
     st.info('V13.2 adiciona visualização operacional sem bypassar o Permission Manager.')

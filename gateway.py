@@ -3,9 +3,9 @@ from datetime import datetime, timezone
 from fastapi import FastAPI, Request, Header, HTTPException, BackgroundTasks
 from fastapi.responses import PlainTextResponse
 
-import whatsapp, core, voice_io, store, security, orchestrator, devices
+import whatsapp, core, voice_io, store, security, orchestrator, devices, live_operations
 
-VERSION='13.0.0'
+VERSION='13.3.0'
 app=FastAPI(title='Jarvis Gateway',version=VERSION)
 LOCAL_AGENT_TOKEN=os.getenv('LOCAL_AGENT_TOKEN','')
 COMMANDS=[]
@@ -60,6 +60,11 @@ def system_capabilities(x_agent_token: str|None = Header(default=None)):
 def system_events(x_agent_token: str|None = Header(default=None)):
     if not auth(x_agent_token): raise HTTPException(status_code=401, detail='Não autorizado')
     return {'ok': True, 'events': orchestrator.events()[-100:]}
+
+@app.get('/system/live')
+def system_live(x_agent_token: str|None = Header(default=None)):
+    if not auth(x_agent_token): raise HTTPException(status_code=401, detail='Não autorizado')
+    return live_operations.snapshot()
 
 @app.get('/missions')
 def get_missions(x_agent_token: str|None = Header(default=None)):

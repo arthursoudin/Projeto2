@@ -16,6 +16,12 @@ Não depende de Streamlit nem de FastAPI.
 """
 import json
 import re
+import time
+import uuid
+try:
+    import orchestrator
+except Exception:
+    orchestrator = None
 
 MAX_STEPS = 6
 MAX_INSTRUCTION = 400
@@ -131,19 +137,35 @@ class Team:
             return None
         return parse_plan(out)
 
-    def run(self, goal):
+    def run(self, goal, mission_id=None):
         goal = str(goal or '').strip()
+        operation_id = 'op_' + uuid.uuid4().hex[:12]
+        def emit(event, status='info', **data):
+            if orchestrator is None:
+                return
+            try:
+                orchestrator.record_event(event, source='planner', status=status, operation_id=operation_id, mission_id=mission_id, goal=goal[:300], **data)
+            except Exception:
+                pass
+
+        emit('planner_started', 'running')
+        plan_started = time.perf_counter()
         plan = self.plan(goal)
         planned = plan is not None
-        if not plan:                                   # sem plano utilizável: o Redator responde direto
+        emit('planner_completed', 'success', duration_ms=round((time.perf_counter()-plan_started)*1000, 1), planned=planned, steps=len(plan or []))
+        if not plan:
             plan = [{'agente': 'redator', 'instrucao': goal}]
         trace, stopped = [], False
         for i, step in enumerate(plan, 1):
             ag, ins = step['agente'], step['instrucao']
             if stopped:
                 trace.append({'n': i, 'agente': ag, 'instrucao': ins, 'ok': None, 'saida': 'não executada (uma etapa anterior falhou)'})
+                emit('agent_skipped', 'info', operation_id='op_' + uuid.uuid4().hex[:12], agent=ag, step=i, instruction=ins[:500])
                 continue
             fn = self.handlers.get(ag)
+            step_operation = 'op_' + uuid.uuid4().hex[:12]
+            started = time.perf_counter()
+            emit('agent_started', 'running', operation_id=step_operation, agent=ag, step=i, instruction=ins[:500])
             if not fn:
                 ok, out = False, f'Agente "{ag}" indisponível.'
             else:
@@ -151,11 +173,15 @@ class Team:
                     ok, out = fn(ins, {'goal': goal, 'trace': list(trace)})
                 except Exception as e:
                     ok, out = False, f'Erro inesperado: {type(e).__name__}: {e}'
+            duration_ms=round((time.perf_counter()-started)*1000, 1)
             trace.append({'n': i, 'agente': ag, 'instrucao': ins, 'ok': bool(ok), 'saida': str(out)})
+            emit('agent_completed', 'success' if ok else 'error', operation_id=step_operation, agent=ag, step=i, instruction=ins[:500], duration_ms=duration_ms, result=str(out)[:700], ok=bool(ok))
             if not ok:
                 stopped = True
+        overall_ok = all(t['ok'] for t in trace)
+        emit('planner_finished', 'success' if overall_ok else 'error', result='missão concluída' if overall_ok else 'execução interrompida por falha', ok=overall_ok)
         return {'goal': goal, 'planned': planned, 'trace': trace, 'reply': self.report(trace, planned),
-                'ok': all(t['ok'] for t in trace)}
+                'ok': overall_ok, 'operation_id': operation_id}
 
     @staticmethod
     def report(trace, planned=True):

@@ -479,7 +479,17 @@ class Brain:
             return False, f'Não consegui escrever: {e}'
 
     def team_run(self, goal):
-        out = self.team.run(goal)
+        mission = None
+        try:
+            import orchestrator
+            mission = orchestrator.create_mission(goal, source=self.channel)
+        except Exception:
+            mission = None
+        try:
+            mission_id = mission.get('id') if isinstance(mission, dict) else None
+            out = self.team.run(goal, mission_id=mission_id)
+        except Exception as e:
+            out = {'goal': goal, 'planned': False, 'trace': [], 'reply': f'Erro na equipe: {type(e).__name__}: {e}', 'ok': False}
         try:
             record = {'quando': now().strftime('%d/%m %H:%M'), **{k: out[k] for k in ('goal', 'planned', 'trace', 'ok')}}
             store.save('team_last', record)
@@ -488,6 +498,12 @@ class Brain:
                 history = []
             history.append(record)
             store.save('team_history', history[-30:])
+        except Exception:
+            pass
+        try:
+            if mission:
+                import orchestrator
+                orchestrator.update_mission(mission['id'], status='completed' if out.get('ok') else 'failed', steps=out.get('trace') or [], result=out.get('reply','')[:1500])
         except Exception:
             pass
         return out
