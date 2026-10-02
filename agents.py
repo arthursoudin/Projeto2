@@ -1,4 +1,4 @@
-"""Jarvis V12.5 - multiagentes.
+"""Jarvis V12.6 - multiagentes.
 
 Uma "equipe" de agentes especialistas coordenada por um Planejador:
 

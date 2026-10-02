@@ -1,4 +1,4 @@
-"""Jarvis V12.5 - núcleo sem Streamlit.
+"""Jarvis V12.6 - núcleo sem Streamlit.
 
 Usado pelo canal WhatsApp (no gateway) e pela equipe de agentes (no app).
 Guarda tarefas e memória no mesmo `store` do app: com Supabase configurado nos DOIS serviços
@@ -472,7 +472,13 @@ class Brain:
     def team_run(self, goal):
         out = self.team.run(goal)
         try:
-            store.save('team_last', {'quando': now().strftime('%d/%m %H:%M'), **{k: out[k] for k in ('goal', 'planned', 'trace', 'ok')}})
+            record = {'quando': now().strftime('%d/%m %H:%M'), **{k: out[k] for k in ('goal', 'planned', 'trace', 'ok')}}
+            store.save('team_last', record)
+            history = store.load('team_history', [])
+            if not isinstance(history, list):
+                history = []
+            history.append(record)
+            store.save('team_history', history[-30:])
         except Exception:
             pass
         return out

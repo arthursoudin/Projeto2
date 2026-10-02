@@ -1,4 +1,4 @@
-# Jarvis V12.5
+# Jarvis V12.6
 
 Interface + IA (Render), agente local no seu PC, rotinas agendadas, armazenamento persistente, voz,
 dashboard, **WhatsApp** e **equipe de agentes**.
@@ -14,7 +14,7 @@ dashboard, **WhatsApp** e **equipe de agentes**.
 ## Como atualizar (3 passos)
 
 1. Extraia o zip **por cima** da sua pasta `Codes` (substituir). O `.git` não é afetado.
-2. `git add .` → `git commit -m "v12.5"` → `git push`. Faça o deploy do **app** e do **gateway** no Render
+2. `git add .` → `git commit -m "v12.6"` → `git push`. Faça o deploy do **app** e do **gateway** no Render
    (os dois usam esta pasta; o gateway agora também precisa do `requirements.txt` completo).
 3. O `local_agent` **não mudou**: se ele já está aberto, não precisa reiniciar.
 
@@ -56,7 +56,7 @@ Para tarefas e memória serem as mesmas no site e no WhatsApp, use o **mesmo Sup
 O plano grátis do Render dorme: a primeira mensagem depois de um tempo parado pode demorar ~1 min. Se o agente do PC
 estiver fechado, o Jarvis avisa em vez de fingir que executou.
 
-## Equipe de agentes (V12.5)
+## Equipe de agentes (V12.6)
 
 `/equipe organize meus estudos de python: crie a pasta Estudos e uma tarefa para amanhã às 9h`
 
@@ -174,9 +174,9 @@ comandos compostos com "e depois". Tudo dentro de `C:\Users\<você>\Jarvis`; o l
 `app.py` interface · `core.py` cérebro sem Streamlit (usado pelo WhatsApp e pela equipe) · `agents.py` multiagentes ·
 `whatsapp.py` canal WhatsApp · `pc_control.py` comandos, permissões e agendamento · `store.py` armazenamento ·
 `voice_io.py` microfone e texto falado · `gateway.py` ponte Render ↔ PC + webhook do WhatsApp ·
-`local_agent/agent.py` executor e agendador no Windows · `tests/` testes (`python -m unittest discover -s tests`)
+`local_agent/agent.py` executor e agendador no Windows · `skills/catalog.json` catálogo de skills · `tests/` testes (`python -m unittest discover -s tests`)
 
-## Mudanças da V12.5 (além do que está acima)
+## Mudanças da V12.6 (além do que está acima)
 
 - **Fuso horário**: tarefas e "que horas são" usavam UTC (o Render roda em UTC); agora usam `America/Sao_Paulo`
   (mude com `JARVIS_TZ`). Tarefas antigas continuam válidas.
@@ -186,6 +186,11 @@ comandos compostos com "e depois". Tudo dentro de `C:\Users\<você>\Jarvis`; o l
 - Tarefas e memória são relidas do armazenamento a cada interação (para enxergar o que o WhatsApp criou); se a leitura
   falhar, a sessão mantém o que tem, nunca zera.
 - `GET /tasks` do gateway agora exige o token do agente (antes era público).
+
+- **Dashboard de Multiagentes**: métricas de execuções, taxa de sucesso, uso por agente, última execução, progresso das etapas e histórico das últimas 30 equipes.
+- **Histórico da equipe**: cada execução multiagente é salva em `team_history`; a última continua em `team_last`.
+- **Skills 2.0**: catálogo das skills foi separado para `skills/catalog.json`, permitindo adicionar/editar descrições e palavras-chave sem alterar `app.py`.
+- **Agentes V12.6 verificados**: Planejador + PC + Tarefas + Memória + Pesquisa + Redator continuam registrados e protegidos pelas mesmas permissões.
 
 ## Limites conhecidos
 

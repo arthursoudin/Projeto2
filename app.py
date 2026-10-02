@@ -94,13 +94,12 @@ def honcho_search(query):
     try: return str(user.search(query))[:10000]
     except Exception as e: return f'Erro na busca de memória: {e}'
 
-SKILLS={
-'planejamento':{'description':'Transforma objetivos em planos e passos executáveis.','keywords':['planejar','plano','organizar','objetivo','projeto']},
-'tarefas':{'description':'Cria, consulta e acompanha tarefas.','keywords':['tarefa','todo','fazer','lembrete','pendência','prazo']},
-'memoria':{'description':'Salva e recupera contexto entre conversas.','keywords':['lembre','lembrar','guarde','memória','recorde','você lembra']},
-'web':{'description':'Pesquisa informações públicas na web.','keywords':['pesquise','pesquisar','internet','web','site','notícia']},
-'programacao':{'description':'Ajuda com Python, Java, JavaScript, HTML, CSS e arquitetura.','keywords':['python','java','javascript','html','css','código','programação']},
-'postgresql':{'description':'Ajuda com SQL e PostgreSQL.','keywords':['sql','postgres','postgresql','banco de dados','database']}}
+try:
+    from skills import load_catalog
+    SKILLS=load_catalog()
+except Exception:
+    SKILLS={}
+
 def detect_skills(text):
     low=text.lower(); found=[n for n,s in SKILLS.items() if any(k in low for k in s['keywords'])]; return found or ['planejamento']
 
@@ -314,12 +313,12 @@ def fmt_due(t):
     except Exception: return '—'
 
 def run_team(goal):
-    """V12.5: o Planejador divide o objetivo e os agentes especialistas executam. Equipes nunca apagam nada."""
+    """V12.6: o Planejador divide o objetivo e os agentes especialistas executam. Equipes nunca apagam nada."""
     brain=core.Brain(run_pc=queue_pc_action,llm=core.make_llm(),agent_status=get_agent_status,channel='app')
     out=brain.team_run(goal); refresh_state(); st.session_state.last_team=out; return out
 
-st.set_page_config(page_title='Jarvis V12.5',page_icon='J',layout='wide')
-st.title('Jarvis V12.5'); st.caption('Agente pessoal • Memória • Tarefas • PC • Permissões • Rotinas • Voz • Dashboard • WhatsApp • Multiagentes')
+st.set_page_config(page_title='Jarvis V12.6',page_icon='J',layout='wide')
+st.title('Jarvis V12.6'); st.caption('Agente pessoal • Memória • Tarefas • PC • Permissões • Rotinas • Voz • Dashboard • WhatsApp • Multiagentes')
 with st.sidebar:
     st.header('Sistema'); st.metric('Modelo',MODEL.split('/')[-1][:24]); st.metric('Skills',len(SKILLS)); st.metric('Tarefas',len(st.session_state.tasks)); st.metric('Pendentes',task_summary()['pendentes']); st.metric('Memórias locais',len(st.session_state.memory)); st.write('**PC Agent:**', 'configurado' if (GATEWAY_URL and LOCAL_AGENT_TOKEN) else 'não configurado')
     _stt=store.status(); st.caption(('✅ ' if _stt['ok'] and _stt['backend']=='supabase' else '⚠️ ')+'Armazenamento: '+_stt['backend']+' — '+_stt['detalhe'])
@@ -424,7 +423,7 @@ with tabs[1]:
         d[3].metric('Fila de comandos',s_.get('queued_commands',0) if s_.get('ok') else '—')
         st.markdown('**Canais**'); wa=s_.get('whatsapp') if s_.get('ok') else None; w=st.columns(4)
         if wa is None:
-            w[0].metric('WhatsApp','—'); st.caption('Sem dados do gateway (ou gateway antigo: faça o deploy da V12.5).')
+            w[0].metric('WhatsApp','—'); st.caption('Sem dados do gateway (ou gateway antigo: faça o deploy da V12.6).')
         else:
             w[0].metric('WhatsApp','Ativo ✅' if wa.get('configured') else 'Não configurado ⚠️')
             w[1].metric('Mensagens hoje',wa.get('messages_today',0)); w[2].metric('Último contato',wa.get('last_message_at') or '—'); w[3].metric('Números autorizados',wa.get('allowed_count',0))
@@ -502,8 +501,14 @@ with tabs[5]:
         if c: st.success('Memória recuperada.'); st.code(c[:12000])
         else: st.warning('Não foi possível recuperar memória. Verifique HONCHO_API_KEY.')
 with tabs[6]:
+    st.subheader('Skills 2.0')
+    st.caption('Catálogo externo de habilidades. As descrições e palavras-chave ficam em skills/catalog.json para facilitar expansão sem mexer no núcleo.')
+    c1,c2=st.columns(2); c1.metric('Skills carregadas',len(SKILLS)); c2.metric('Palavras-chave',sum(len(x.get('keywords',[])) for x in SKILLS.values()))
     for n,s in SKILLS.items():
-        with st.expander(n): st.write(s['description']); st.write(', '.join(s['keywords']))
+        with st.expander(n):
+            st.write(s.get('description',''))
+            st.write('**Palavras-chave:**',', '.join(s.get('keywords',[])))
+    st.info('Próxima evolução: skills executáveis poderão registrar ferramentas próprias, mantendo as permissões do Jarvis Core.')
 with tabs[7]:
     st.json(st.session_state.last_action or {'status':'Nenhuma ação executada'}); st.write('Voz:',VOICE); st.write('Modelo:',MODEL); st.write('Horário:',current_time()); st.write('Gateway:',GATEWAY_URL or 'não configurado'); st.write('Agente local:', 'configurado' if LOCAL_AGENT_TOKEN else 'não configurado')
     st.subheader('Permissões do PC'); st.table([{'Ação':a,'Nível':l} for a,l in PERMISSIONS.items()])
@@ -516,7 +521,7 @@ with tabs[8]:
     chk=st.session_state.get('wa_check'); wa=(chk or {}).get('whatsapp') if (chk or {}).get('ok') else None
     if chk is None: st.info('Clique em "Verificar agora" para consultar o gateway.')
     elif not chk.get('ok'): st.error(chk.get('error') or 'Gateway sem resposta.')
-    elif wa is None: st.warning('O gateway ainda é uma versão antiga. Faça o deploy da V12.5 no serviço do gateway.')
+    elif wa is None: st.warning('O gateway ainda é uma versão antiga. Faça o deploy da V12.6 no serviço do gateway.')
     else:
         (st.success if wa.get('configured') else st.warning)('WhatsApp ativo.' if wa.get('configured') else 'Faltam variáveis no gateway.')
         import whatsapp as _wa
@@ -532,11 +537,58 @@ with tabs[8]:
 5. Em *WhatsApp > Configuração > Webhook*, cole a URL acima e o mesmo `WHATSAPP_VERIFY_TOKEN`; inscreva-se no campo **messages**.
 6. Mande **/ajuda** para o número de teste. Para tarefas e memória aparecerem iguais aqui e no WhatsApp, use o **mesmo Supabase** nos dois serviços.''')
 with tabs[9]:
-    st.subheader('Equipe de agentes (V12.5)')
-    st.caption('Peça no chat: "/equipe organize meus estudos de python: crie a pasta Estudos e uma tarefa para amanhã às 9h". O Planejador divide o pedido e cada especialista executa a sua parte. Equipes nunca apagam nada.')
-    st.table([{'Agente':f"{v['icone']} {v['nome']}",'Faz':v['descricao']} for v in AGENTS.values()])
+    st.subheader('Dashboard de Multiagentes (V12.6)')
+    st.caption('Visão operacional da equipe: agentes disponíveis, execução recente, histórico, taxa de sucesso e etapas do Planejador.')
+
     last=st.session_state.get('last_team') or store.load('team_last',{})
+    history=store.load('team_history',[])
+    if not isinstance(history,list): history=[]
+
+    runs=len(history)
+    successful=sum(1 for x in history if x.get('ok'))
+    failed=max(0,runs-successful)
+    executed_steps=sum(1 for x in history for t in (x.get('trace') or []) if t.get('ok') is True)
+    rate=(successful/runs*100) if runs else 0
+
+    c1,c2,c3,c4=st.columns(4)
+    c1.metric('Execuções',runs)
+    c2.metric('Taxa de sucesso',f'{rate:.0f}%')
+    c3.metric('Etapas concluídas',executed_steps)
+    c4.metric('Execuções com falha',failed)
+
+    st.markdown('### Agentes disponíveis')
+    agent_rows=[]
+    for key,v in AGENTS.items():
+        uses=sum(1 for x in history for t in (x.get('trace') or []) if t.get('agente')==key)
+        oks=sum(1 for x in history for t in (x.get('trace') or []) if t.get('agente')==key and t.get('ok') is True)
+        agent_rows.append({'Agente':f"{v['icone']} {v['nome']}",'ID':key,'Uso':uses,'Sucesso':f"{(oks/uses*100):.0f}%" if uses else '—'})
+    st.table(agent_rows)
+
     if last and last.get('trace'):
-        st.markdown('**Última execução**'+(f" ({last['quando']})" if last.get('quando') else '')); st.write('Objetivo:',last.get('goal',''))
-        st.table([{'#':t['n'],'Agente':t['agente'],'Instrução':t['instrucao'],'Resultado':'⏭️ não executada' if t['ok'] is None else ('✅ ok' if t['ok'] else '❌ falhou'),'Saída':t['saida'][:200]} for t in last['trace']])
-    else: st.info('Nenhuma execução ainda.')
+        st.markdown('### Última execução')
+        st.write('**Objetivo:**',last.get('goal',''))
+        st.write('**Status:**', 'Concluída' if last.get('ok') else 'Interrompida por falha')
+        steps=last.get('trace') or []
+        done=sum(1 for t in steps if t.get('ok') is True)
+        st.progress((done/len(steps)) if steps else 0, text=f'{done}/{len(steps)} etapas concluídas')
+        st.table([{'#':t['n'],'Agente':f"{AGENTS.get(t['agente'],{}).get('icone','')} {AGENTS.get(t['agente'],{}).get('nome',t['agente'])}",'Instrução':t['instrucao'],'Status':'⏭️ não executada' if t['ok'] is None else ('✅ ok' if t['ok'] else '❌ falhou'),'Saída':t['saida'][:300]} for t in steps])
+    else:
+        st.info('Nenhuma execução multiagente registrada. Use /equipe no chat.')
+
+    st.markdown('### Histórico da equipe')
+    if history:
+        rows=[]
+        for x in reversed(history[-15:]):
+            tr=x.get('trace') or []
+            rows.append({'Quando':x.get('quando','—'),'Objetivo':str(x.get('goal',''))[:90],'Etapas':len(tr),'Status':'✅ concluída' if x.get('ok') else '❌ falhou','Planejado':'Sim' if x.get('planned') else 'Fallback'})
+        st.table(rows)
+    else:
+        st.caption('O histórico aparecerá aqui após a primeira execução.')
+
+    with st.expander('Configuração do Planejador'):
+        st.write('Máximo de etapas:',6)
+        st.write('Agentes registrados:',', '.join(AGENTS.keys()))
+        st.write('Regra de segurança: a equipe não apaga arquivos/pastas; exclusões continuam exigindo confirmação direta.')
+
+    st.markdown('### Como usar')
+    st.code('/equipe organize meus estudos de Python: crie a pasta Estudos e uma tarefa para amanhã às 9h')
