@@ -1,4 +1,4 @@
-# Jarvis V12.8
+# Jarvis V13.1
 
 Interface + IA (Render), agente local no seu PC, rotinas agendadas, armazenamento persistente, voz,
 dashboard, **WhatsApp** e **equipe de agentes**.
@@ -11,6 +11,8 @@ dashboard, **WhatsApp** e **equipe de agentes**.
 | 12.4 | Rotinas agendadas + armazenamento persistente (Supabase) |
 | 12.5 | **Multiagentes**: Planejador + especialistas (`/equipe`) |
 | 12.8 | **Computer Agent**: planejamento seguro, execução sequencial e verificação no PC |
+| 12.9 | **Segurança**: permissões, risco, aprovações, auditoria, limites e Kill Switch |
+| 13.0 | **Core Integrado**: Command Center, timeline global, missões, catálogo de componentes e base para Multi-PC |
 
 ## Como atualizar (3 passos)
 
@@ -264,3 +266,24 @@ No PC, basta iniciar uma vez `start_overnight_loop.bat`. Depois disso, não é n
 - Exclusão continua bloqueada por política padrão.
 
 Endpoints do gateway: `/security/status`, `/security/approvals`, `/security/approve/{id}`, `/security/deny/{id}`, `/security/kill-switch`, `/security/policy`, `/security/audit`.
+
+
+## V13.1 — Core Integrado
+
+A V13.1 não substitui os módulos que já funcionam. Ela adiciona uma camada de coordenação para o
+estado global do sistema:
+
+- `orchestrator.py`: estado dos componentes, timeline, missões e capacidades.
+- `devices.py`: catálogo persistente preparado para a expansão Multi-PC.
+- Gateway: `/system/status`, `/system/capabilities`, `/system/events`, `/missions` e `/devices`, protegidos pelo token.
+- Dashboard: nova aba **Command Center**.
+- Ações continuam passando pela segurança da V12.9.
+- Nenhuma execução arbitrária de shell foi adicionada.
+
+### Próximas versões
+
+- V13.1 — Dashboard 2.0
+- V13.2 — Agent Map
+- V13.3 — Live Operations
+- V13.4 — Notification Center
+- V13.5 — Multi-PC

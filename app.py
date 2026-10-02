@@ -107,6 +107,7 @@ from core import now, current_time, iso_now, calculator, parse_due, recurrence_f
 import core
 from agents import wants_team, strip_trigger, AGENTS
 from tool_registry import tool_rows, tools_for_agent
+import orchestrator, devices
 
 def next_task_id():
     return max([int(t.get('id',0)) for t in st.session_state.tasks] or [0])+1
@@ -349,8 +350,35 @@ def run_team(goal):
     brain=core.Brain(run_pc=queue_pc_action,llm=core.make_llm(),agent_status=get_agent_status,channel='app')
     out=brain.team_run(goal); refresh_state(); st.session_state.last_team=out; return out
 
-st.set_page_config(page_title='Jarvis V12.9',page_icon='J',layout='wide')
-st.title('Jarvis V12.9'); st.caption('Agente pessoal • Memória • Tarefas • PC • Computer Agent • Permissões • Rotinas • Voz • Dashboard • WhatsApp • Multiagentes')
+st.set_page_config(page_title='Jarvis V13.1',page_icon='J',layout='wide')
+
+# V13.1 — Dashboard 2.0: camada visual centralizada, sem alterar as permissões.
+st.markdown('''
+<style>
+:root { --jarvis-border: rgba(148,163,184,.18); --jarvis-muted:#94a3b8; }
+.block-container { padding-top: 1.1rem; padding-bottom: 2rem; max-width: 1500px; }
+.jarvis-hero { padding: 1.25rem 1.4rem; border: 1px solid var(--jarvis-border); border-radius: 18px; background: linear-gradient(135deg, rgba(15,23,42,.96), rgba(30,41,59,.82)); margin-bottom: 1rem; }
+.jarvis-hero h1 { margin: 0; font-size: 2.1rem; letter-spacing: .08em; }
+.jarvis-hero p { margin: .35rem 0 0; color: var(--jarvis-muted); }
+.jarvis-card { border: 1px solid var(--jarvis-border); border-radius: 16px; padding: 1rem; background: rgba(15,23,42,.45); min-height: 100px; }
+.jarvis-label { color: var(--jarvis-muted); font-size: .78rem; text-transform: uppercase; letter-spacing: .08em; }
+.jarvis-value { font-size: 1.45rem; font-weight: 700; margin-top: .3rem; }
+.jarvis-ok { color:#86efac; } .jarvis-warn { color:#facc15; } .jarvis-bad { color:#fca5a5; }
+[data-testid="stMetric"] { border: 1px solid var(--jarvis-border); padding: .75rem; border-radius: 14px; background: rgba(15,23,42,.35); }
+
+.jarvis-map { display:flex; flex-wrap:wrap; align-items:center; gap:.7rem; padding:1rem; border:1px solid var(--jarvis-border); border-radius:18px; background:rgba(2,6,23,.45); overflow-x:auto; }
+.jarvis-node { min-width:145px; max-width:210px; min-height:76px; padding:.8rem .9rem; border:1px solid var(--jarvis-border); border-radius:14px; position:relative; background:rgba(15,23,42,.72); box-shadow:0 6px 22px rgba(0,0,0,.12); }
+.jarvis-node:not(:last-child)::after { content:'→'; position:absolute; right:-.62rem; top:50%; transform:translateY(-50%); color:var(--jarvis-muted); z-index:2; font-weight:700; }
+.jarvis-node-title { font-weight:700; font-size:.86rem; }
+.jarvis-node-state { color:var(--jarvis-muted); font-size:.72rem; margin-top:.35rem; text-transform:uppercase; letter-spacing:.05em; }
+.jarvis-node-running { border-color:rgba(250,204,21,.65); box-shadow:0 0 18px rgba(250,204,21,.12); }
+.jarvis-node-error { border-color:rgba(248,113,113,.75); }
+.jarvis-node-ok { border-color:rgba(134,239,172,.55); }
+.jarvis-node-idle { border-color:rgba(148,163,184,.28); }
+</style>
+<div class="jarvis-hero"><h1>J A R V I S</h1><p>Command Center • Dashboard 2.0 • Core Integrado • Agent Map</p></div>
+''', unsafe_allow_html=True)
+st.title('Jarvis V13.1'); st.caption('Agente pessoal • Memória • Tarefas • PC • Computer Agent • Permissões • Rotinas • Voz • Dashboard 2.0 • WhatsApp • Multiagentes')
 with st.sidebar:
     st.header('Sistema'); st.metric('Modelo',MODEL.split('/')[-1][:24]); st.metric('Skills',len(SKILLS)); st.metric('Tarefas',len(st.session_state.tasks)); st.metric('Pendentes',task_summary()['pendentes']); st.metric('Memórias locais',len(st.session_state.memory)); st.write('**PC Agent:**', 'configurado' if (GATEWAY_URL and LOCAL_AGENT_TOKEN) else 'não configurado')
     _stt=store.status(); st.caption(('✅ ' if _stt['ok'] and _stt['backend']=='supabase' else '⚠️ ')+'Armazenamento: '+_stt['backend']+' — '+_stt['detalhe'])
@@ -384,7 +412,7 @@ def save_overnight_config(cfg):
     except Exception as e:
         return {'ok':False,'error':f'Não foi possível salvar a configuração: {type(e).__name__}: {e}'}
 
-tabs=st.tabs(['Chat','Dashboard','Tarefas','Automações','Memória','Honcho','Skills','Sistema','WhatsApp','Agentes','Tools','Laboratório Noturno','Computer Agent','Segurança'])
+tabs=st.tabs(['Chat','Dashboard','Tarefas','Automações','Memória','Honcho','Skills','Sistema','WhatsApp','Agentes','Tools','Laboratório Noturno','Computer Agent','Segurança','Command Center','Agent Map'])
 with tabs[0]:
     for m in st.session_state.messages:
         with st.chat_message(m['role']): st.markdown(m['content'])
@@ -861,3 +889,201 @@ with tabs[13]:
         except Exception as e: st.warning(f'Auditoria indisponível: {e}')
 
         st.info('Regra V12.9: baixo risco pode executar automaticamente; médio/alto risco entra na fila de aprovação; ações bloqueadas continuam bloqueadas. O Laboratório Noturno pode analisar segurança, mas não recebe permissão para aplicar mudanças sozinho.')
+
+
+# V13.1 — Dashboard 2.0 / Command Center
+with tabs[14]:
+    st.subheader('Command Center — Dashboard 2.0')
+    st.caption('Visão operacional central do Jarvis: estado, execução, dispositivos, missões e timeline.')
+
+    try:
+        _agent = get_agent_status()
+    except Exception:
+        _agent = {'ok': False, 'online': False, 'info': {}}
+    try:
+        _sec = get_security_status()
+    except Exception:
+        _sec = {}
+    try:
+        _wa = get_agent_status().get('whatsapp', {}) if isinstance(get_agent_status(), dict) else {}
+    except Exception:
+        _wa = {}
+
+    _devices = devices.list_devices()
+    _missions = orchestrator.list_missions()
+    _events = orchestrator.events()
+    _running = [m for m in _missions if m.get('status') == 'running']
+    _failed = [m for m in _missions if m.get('status') == 'failed']
+
+    c1,c2,c3,c4,c5=st.columns(5)
+    c1.metric('Versão', '13.2.0')
+    c2.metric('Agente local', 'ONLINE' if _agent.get('online') else 'OFFLINE')
+    c3.metric('Dispositivos', len(_devices))
+    c4.metric('Missões ativas', len(_running))
+    c5.metric('Eventos', len(_events))
+
+    st.markdown('### Estado do sistema')
+    a,b,c,d=st.columns(4)
+    a.markdown('<div class="jarvis-card"><div class="jarvis-label">Core</div><div class="jarvis-value jarvis-ok">OPERACIONAL</div><div>Planner, memória, tasks e tools integrados.</div></div>', unsafe_allow_html=True)
+    sec_class = 'jarvis-bad' if _sec.get('kill_switch') else 'jarvis-ok'
+    sec_label = 'BLOQUEADO' if _sec.get('kill_switch') else 'ATIVA'
+    b.markdown(f'<div class="jarvis-card"><div class="jarvis-label">Segurança</div><div class="jarvis-value {sec_class}">{sec_label}</div><div>{_sec.get("pending",0)} aprovação(ões) pendente(s).</div></div>', unsafe_allow_html=True)
+    c.markdown(f'<div class="jarvis-card"><div class="jarvis-label">Missões</div><div class="jarvis-value">{len(_missions)}</div><div>{len(_running)} em execução • {len(_failed)} falharam.</div></div>', unsafe_allow_html=True)
+    online_devices = len([x for x in _devices if x.get('status') == 'online'])
+    d.markdown(f'<div class="jarvis-card"><div class="jarvis-label">Dispositivos</div><div class="jarvis-value">{online_devices}/{len(_devices)}</div><div>online / cadastrados.</div></div>', unsafe_allow_html=True)
+
+    st.markdown('### Fluxo de execução')
+    st.code('OBJETIVO  →  PLANNER  →  AGENTES  →  TOOLS/SKILLS  →  SEGURANÇA  →  LOCAL AGENT  →  QA/VERIFICAÇÃO  →  RESULTADO', language='text')
+
+    left,right=st.columns([1,1])
+    with left:
+        st.markdown('### Componentes')
+        st.table([{'ID':k,'Componente':v} for k,v in orchestrator.COMPONENTS.items()])
+    with right:
+        st.markdown('### Capacidades')
+        cap=orchestrator.capabilities()
+        for key,value in cap.items():
+            if key != 'version':
+                st.write(f'**{key.replace("_"," ").title()}**: {", ".join(value) if isinstance(value,list) else value}')
+
+    st.markdown('### Dispositivos conectados')
+    if _devices:
+        rows=[]
+        for x in _devices:
+            status=str(x.get('status','offline')).upper()
+            rows.append({'Status':status,'Nome':x.get('name','—'),'ID':x.get('id','—'),'Versão':x.get('version','—'),'Último contato':str(x.get('last_seen','—'))[:19].replace('T',' ')})
+        st.table(rows)
+    else:
+        st.info('Nenhum dispositivo registrado. A base Multi-PC já está preparada para a próxima etapa.')
+
+    st.markdown('### Missões')
+    if _missions:
+        st.table([{'ID':x.get('id','—'),'Objetivo':str(x.get('goal',''))[:110],'Status':x.get('status','—'),'Origem':x.get('source','—'),'Atualizada':str(x.get('updated_at',''))[:19].replace('T',' ')} for x in reversed(_missions[-15:])])
+    else:
+        st.caption('Nenhuma missão registrada ainda.')
+
+    st.markdown('### Timeline global')
+    if _events:
+        rows=[]
+        for x in reversed(_events[-25:]):
+            rows.append({'Hora':str(x.get('timestamp',''))[:19].replace('T',' '),'Origem':x.get('source','—'),'Evento':x.get('event','—'),'Status':x.get('status','—'),'Detalhes':json.dumps(x.get('data',{}),ensure_ascii=False)[:220]})
+        st.dataframe(rows, use_container_width=True, hide_index=True)
+    else:
+        st.caption('A timeline aparecerá conforme o Jarvis executar ações.')
+
+    with st.expander('Arquitetura do Dashboard 2.0'):
+        st.write('O Dashboard 2.0 é uma camada visual. Ele não concede novas permissões aos agentes e não bypassa o Permission Manager.')
+        st.write('Próxima etapa: V13.2 — Agent Map, com visualização do fluxo Planner → Agentes → QA em tempo real.')
+
+    st.info('V13.1 adiciona a nova camada visual sem alterar a política de segurança da V12.9/V13.0.')
+
+
+# V13.2 — Agent Map
+with tabs[15]:
+    st.subheader('Agent Map — V13.2')
+    st.caption('Mapa operacional do fluxo Planner → Agentes → QA/Verificação. A visualização usa o estado real das missões e da timeline; não concede permissões novas.')
+
+    try:
+        _missions = orchestrator.list_missions()
+    except Exception:
+        _missions = []
+    try:
+        _events = orchestrator.events()
+    except Exception:
+        _events = []
+
+    _running = [m for m in _missions if m.get('status') == 'running']
+    _failed = [m for m in _missions if m.get('status') == 'failed']
+    _done = [m for m in _missions if m.get('status') in ('done','completed','success')]
+
+    c1,c2,c3,c4=st.columns(4)
+    c1.metric('Missões em execução', len(_running))
+    c2.metric('Concluídas', len(_done))
+    c3.metric('Falhas', len(_failed))
+    c4.metric('Eventos', len(_events))
+
+    # Descobre agentes citados nos eventos/missões sem confiar em nomes fixos.
+    _agent_names=[]
+    for ev in _events[-100:]:
+        data=ev.get('data',{}) if isinstance(ev.get('data',{}),dict) else {}
+        for key in ('agent','agent_id','executor','worker'):
+            value=data.get(key) or ev.get(key)
+            if value and str(value) not in _agent_names:
+                _agent_names.append(str(value))
+    for m in _missions[-50:]:
+        for key in ('agent','agent_id','executor'):
+            value=m.get(key)
+            if value and str(value) not in _agent_names:
+                _agent_names.append(str(value))
+    if not _agent_names:
+        _agent_names=list(AGENTS.keys())
+    _agent_names=_agent_names[:12]
+
+    def _agent_state(name):
+        lname=str(name).lower()
+        for ev in reversed(_events[-100:]):
+            data=ev.get('data',{}) if isinstance(ev.get('data',{}),dict) else {}
+            candidate=str(data.get('agent') or data.get('agent_id') or ev.get('agent') or '').lower()
+            if candidate == lname or lname in candidate or candidate in lname:
+                status=str(ev.get('status') or data.get('status') or '').lower()
+                if status in ('running','executing','active'):
+                    return 'EXECUTANDO','jarvis-node-running'
+                if status in ('error','failed','failure'):
+                    return 'ERRO','jarvis-node-error'
+                if status in ('done','completed','success','ok'):
+                    return 'OK','jarvis-node-ok'
+        return 'AGUARDANDO','jarvis-node-idle'
+
+    st.markdown('### Fluxo em tempo real')
+    _nodes=[]
+    for title,state,cls in [
+        ('OBJETIVO','ENTRADA','jarvis-node-ok'),
+        ('PLANNER','ORQUESTRANDO','jarvis-node-running' if _running else 'jarvis-node-idle')]:
+        _nodes.append(f'<div class="jarvis-node {cls}"><div class="jarvis-node-title">{title}</div><div class="jarvis-node-state">{state}</div></div>')
+    for name in _agent_names:
+        state,cls=_agent_state(name)
+        _nodes.append(f'<div class="jarvis-node {cls}"><div class="jarvis-node-title">{name}</div><div class="jarvis-node-state">{state}</div></div>')
+    _nodes.append('<div class="jarvis-node jarvis-node-idle"><div class="jarvis-node-title">QA / VERIFICAÇÃO</div><div class="jarvis-node-state">PÓS-EXECUÇÃO</div></div>')
+    _nodes.append('<div class="jarvis-node jarvis-node-ok"><div class="jarvis-node-title">RESULTADO</div><div class="jarvis-node-state">ENTREGA</div></div>')
+
+    _html='<div class="jarvis-map">' + ''.join(_nodes) + '</div>'
+    st.markdown(_html, unsafe_allow_html=True)
+
+    st.markdown('### Agentes detectados')
+    _rows=[]
+    for name in _agent_names:
+        state,_=_agent_state(name)
+        _rows.append({'Agente':name,'Estado':state})
+    st.dataframe(_rows,use_container_width=True,hide_index=True)
+
+    st.markdown('### Última atividade por agente')
+    _latest=[]
+    for name in _agent_names:
+        match=None
+        lname=str(name).lower()
+        for ev in reversed(_events[-150:]):
+            data=ev.get('data',{}) if isinstance(ev.get('data',{}),dict) else {}
+            candidate=str(data.get('agent') or data.get('agent_id') or ev.get('agent') or '').lower()
+            if candidate == lname or lname in candidate or candidate in lname:
+                match=ev; break
+        if match:
+            _latest.append({'Agente':name,'Evento':match.get('event','—'),'Status':match.get('status','—'),'Hora':str(match.get('timestamp',''))[:19].replace('T',' ')})
+    if _latest:
+        st.dataframe(_latest,use_container_width=True,hide_index=True)
+    else:
+        st.info('Ainda não há eventos de agentes suficientes para preencher o mapa. Execute uma missão para visualizar o fluxo real.')
+
+    st.markdown('### Missões recentes')
+    if _missions:
+        st.dataframe([
+            {'ID':m.get('id','—'),'Objetivo':str(m.get('goal',''))[:120],'Status':m.get('status','—'),'Etapas':len(m.get('steps') or m.get('plan') or [])}
+            for m in reversed(_missions[-12:])
+        ],use_container_width=True,hide_index=True)
+    else:
+        st.caption('Nenhuma missão registrada.')
+
+    with st.expander('Como o mapa funciona'):
+        st.write('O mapa é uma camada de observabilidade. Ele lê missões e eventos registrados pelo Core e apresenta o estado conhecido dos agentes. Ele não executa comandos diretamente e não altera permissões.')
+        st.write('Próxima evolução: V13.3 — Live Operations, com acompanhamento mais detalhado da ação atual, ferramenta, duração e resultado.')
+
+    st.info('V13.2 adiciona visualização operacional sem bypassar o Permission Manager.')

@@ -17,11 +17,13 @@ import sys
 import threading
 import time
 import webbrowser
+import uuid
+import getpass
 from urllib.parse import quote_plus, urlparse
 
 import requests
 
-VERSION = "12.4.2"
+VERSION = "13.0.0"
 BASE_DIR = pathlib.Path(__file__).resolve().parent
 CONFIG_FILE = BASE_DIR / "config.json"
 
@@ -42,7 +44,7 @@ RESERVED = {"CON", "PRN", "AUX", "NUL"} | {f"COM{i}" for i in range(1, 10)} | {f
 
 # ------------------------------------------------------------------ config
 def load_config():
-    cfg = {"gateway_url": "", "token": "", "poll_seconds": 1}
+    cfg = {"gateway_url": "", "token": "", "poll_seconds": 1, "device_id": ""}
     try:
         if CONFIG_FILE.exists():
             loaded = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
@@ -70,7 +72,7 @@ def first_run_setup(cfg):
         url = "https://" + url
     cfg.update({"gateway_url": url, "token": token})
     CONFIG_FILE.write_text(
-        json.dumps({"gateway_url": url, "token": token, "poll_seconds": cfg["poll_seconds"]}, indent=2),
+        json.dumps({"gateway_url": url, "token": token, "poll_seconds": cfg["poll_seconds"], "device_id": cfg.get("device_id", "")}, indent=2),
         encoding="utf-8",
     )
     print("\n[OK] Configuração salva em config.json\n")
@@ -78,6 +80,11 @@ def first_run_setup(cfg):
 
 
 CONFIG = load_config()
+if not str(CONFIG.get("device_id") or "").strip():
+    CONFIG["device_id"] = str(uuid.uuid5(
+        uuid.NAMESPACE_DNS,
+        f"jarvis:{platform.node()}:{getpass.getuser()}"
+    ))
 
 
 def headers():
@@ -757,7 +764,12 @@ def _cpu_percent():
 
 
 def build_heartbeat():
-    hb = {"version": VERSION, "computer": platform.node(), "cpu_percent": _cpu_percent(),
+    hb = {
+        "device_id": CONFIG.get("device_id"),
+        "version": VERSION,
+        "computer": platform.node(),
+        "capabilities": ["computer", "filesystem", "browser", "scheduler"],
+        "cpu_percent": _cpu_percent(),
           "jarvis_folder": str(JARVIS_HOME.resolve())}
     for part in (_memory_info(), _disk_info(), _uptime_info()):
         hb.update({k: v for k, v in part.items() if not k.endswith("_erro") and k != "disco"})

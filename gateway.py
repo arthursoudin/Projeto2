@@ -3,9 +3,9 @@ from datetime import datetime, timezone
 from fastapi import FastAPI, Request, Header, HTTPException, BackgroundTasks
 from fastapi.responses import PlainTextResponse
 
-import whatsapp, core, voice_io, store, security
+import whatsapp, core, voice_io, store, security, orchestrator, devices
 
-VERSION='12.9.0'
+VERSION='13.0.0'
 app=FastAPI(title='Jarvis Gateway',version=VERSION)
 LOCAL_AGENT_TOKEN=os.getenv('LOCAL_AGENT_TOKEN','')
 COMMANDS=[]
@@ -30,7 +30,46 @@ def tasks():
 @app.get('/')
 def root(): return {'service':'jarvis-gateway','version':VERSION}
 @app.get('/health')
-def health(): return {'ok':True,'service':'jarvis-gateway','version':VERSION,'channels':['whatsapp'],'whatsapp_configured':whatsapp.configured(),'honcho_configured':bool(os.getenv('HONCHO_API_KEY')),'local_agent_configured':bool(LOCAL_AGENT_TOKEN),'queued_commands':len(COMMANDS)}
+def health():
+    return {
+        'ok': True,
+        'service': 'jarvis-gateway',
+        'version': VERSION,
+        'channels': ['whatsapp'],
+        'whatsapp_configured': whatsapp.configured(),
+        'honcho_configured': bool(os.getenv('HONCHO_API_KEY')),
+        'local_agent_configured': bool(LOCAL_AGENT_TOKEN),
+        'queued_commands': len(COMMANDS),
+        'core_integrated': True,
+    }
+
+@app.get('/system/status')
+def system_status(x_agent_token: str|None = Header(default=None)):
+    if not auth(x_agent_token): raise HTTPException(status_code=401, detail='Não autorizado')
+    return orchestrator.status(
+        agent_status=agent_status_dict(),
+        whatsapp_status=whatsapp.status(),
+    )
+
+@app.get('/system/capabilities')
+def system_capabilities(x_agent_token: str|None = Header(default=None)):
+    if not auth(x_agent_token): raise HTTPException(status_code=401, detail='Não autorizado')
+    return {'ok': True, 'capabilities': orchestrator.capabilities()}
+
+@app.get('/system/events')
+def system_events(x_agent_token: str|None = Header(default=None)):
+    if not auth(x_agent_token): raise HTTPException(status_code=401, detail='Não autorizado')
+    return {'ok': True, 'events': orchestrator.events()[-100:]}
+
+@app.get('/missions')
+def get_missions(x_agent_token: str|None = Header(default=None)):
+    if not auth(x_agent_token): raise HTTPException(status_code=401, detail='Não autorizado')
+    return {'ok': True, 'missions': orchestrator.list_missions()}
+
+@app.get('/devices')
+def get_devices(x_agent_token: str|None = Header(default=None)):
+    if not auth(x_agent_token): raise HTTPException(status_code=401, detail='Não autorizado')
+    return {'ok': True, 'devices': devices.list_devices(), 'summary': devices.summary()}
 
 @app.get('/uptime')
 def uptime():
@@ -96,6 +135,7 @@ def enqueue(action, params, agent='app', source='app', bypass_approval=False):
     clean=dict(params); clean.pop('_security_approved',None); clean.pop('_security_cycle_id',None)
     COMMANDS.append({'id':cid,'action':action,'params':clean,'created_at':datetime.now(timezone.utc).isoformat(),'agent':agent})
     security.audit('action_queued',command_id=cid,action=action,agent=agent,risk=security.risk_for(action),params=clean)
+    orchestrator.record_event('action_queued', source=agent, status='queued', command_id=cid, action=action)
     return cid
 
 @app.post('/agent/commands')
@@ -136,6 +176,16 @@ async def heartbeat(request:Request, x_agent_token: str|None = Header(default=No
     if not isinstance(body,dict): raise HTTPException(status_code=400,detail='corpo inválido')
     info={k:_clean(v) for k,v in body.items() if k in INFO_KEYS}
     AGENT['info']=info; AGENT['last_seen']=time.time()
+    if body.get('device_id'):
+        try:
+            devices.register(
+                body.get('device_id'),
+                name=body.get('computer'),
+                capabilities=body.get('capabilities') if isinstance(body.get('capabilities'), list) else [],
+                version=body.get('version'),
+            )
+        except Exception:
+            pass
     HISTORY.append({'t':AGENT['last_seen'],'cpu':info.get('cpu_percent'),'ram':info.get('ram_em_uso_percent')}); del HISTORY[:-120]
     return {'ok':True}
 
