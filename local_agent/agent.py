@@ -109,7 +109,7 @@ def _check_part(part):
 
 
 def safe_path(name):
-    """Resolve um caminho garantindo que fica dentro de ~/Jarvis."""
+    """Caminhos de escrita continuam confinados ao workspace ~/Jarvis."""
     raw = str(name or "").strip()
     if raw in ("", "."):
         return JARVIS_HOME.resolve()
@@ -122,7 +122,51 @@ def safe_path(name):
     try:
         cand.relative_to(JARVIS_HOME.resolve())
     except ValueError:
-        raise ValueError("Acesso fora da pasta Jarvis não permitido.")
+        raise ValueError("Acesso fora da pasta Jarvis não permitido para gravação.")
+    return cand
+
+
+def user_roots():
+    """Áreas do usuário que o Jarvis pode consultar/abrir, sem liberar escrita geral."""
+    home=pathlib.Path.home().resolve()
+    roots=[home, JARVIS_HOME.resolve()]
+    for name in ('Desktop','Documents','Downloads','Pictures','Videos','Music'):
+        p=home/name
+        if p.exists(): roots.append(p.resolve())
+    # Bibliotecas localizadas (ex.: Área de Trabalho / Documentos)
+    for name in ('Área de Trabalho','Documentos','Downloads','Imagens','Vídeos','Músicas'):
+        p=home/name
+        if p.exists(): roots.append(p.resolve())
+    unique=[]
+    for r in roots:
+        if r not in unique: unique.append(r)
+    return unique
+
+
+def safe_user_path(name):
+    """Resolve para leitura/abertura dentro do perfil do usuário ou ~/Jarvis."""
+    raw=str(name or '').strip()
+    if raw in ('','.'): return pathlib.Path.home().resolve()
+    p=pathlib.Path(raw.replace('\\','/'))
+    if p.is_absolute(): cand=p.resolve()
+    else:
+        # nomes simples continuam relativos ao workspace Jarvis; nomes de biblioteca vão para a pasta do usuário
+        first=raw.replace('\\','/').split('/')[0].strip().lower()
+        home=pathlib.Path.home().resolve()
+        known={'desktop','documents','downloads','pictures','videos','music','area de trabalho','documentos','imagens','videos','musicas'}
+        parts=[x for x in raw.replace('\\','/').split('/') if x not in ('','.','..')]
+        if first=='jarvis':
+            base=home; parts=parts[1:]
+        else:
+            base=home if first in known else JARVIS_HOME.resolve()
+        cand=base.joinpath(*parts).resolve()
+    allowed=False
+    for root in user_roots():
+        try:
+            cand.relative_to(root); allowed=True; break
+        except ValueError: pass
+    if not allowed:
+        raise ValueError('Acesso de leitura/abertura fora do perfil do usuário não permitido.')
     return cand
 
 
@@ -166,13 +210,22 @@ def _startfile(target):
     os.startfile(str(target))
 
 
+CODE_EXTENSIONS = {'.py','.pyw','.js','.ts','.tsx','.jsx','.html','.htm','.css','.scss','.sass','.json','.xml','.yml','.yaml','.md','.txt','.csv','.sql','.java','.c','.cpp','.h','.hpp','.cs','.php','.go','.rs','.sh'}
+OPEN_BLOCKED_EXT = {'.exe','.bat','.cmd','.com','.msi','.scr','.ps1','.vbs','.vbe','.wsf','.wsh','.lnk','.reg','.hta','.jar','.dll','.cpl'}
+
 def _open_with(target, app):
-    if app == "vscode":
+    # Arquivos de código sempre vão para o editor quando possível, evitando execução acidental.
+    if app == "vscode" or (not app and target.suffix.lower() in CODE_EXTENSIONS):
         exe = _find_vscode()
         if not exe:
-            raise RuntimeError("VS Code não encontrado. Instale-o ou abra pelo menu Iniciar.")
-        subprocess.Popen([exe, str(target)])
-    elif app == "notepad":
+            if app == 'vscode':
+                raise RuntimeError("VS Code não encontrado. Instale-o ou abra pelo menu Iniciar.")
+            if target.suffix.lower() in CODE_EXTENSIONS:
+                raise RuntimeError("VS Code não encontrado para abrir este arquivo de código com segurança.")
+        else:
+            subprocess.Popen([exe, str(target)])
+            return
+    if app == "notepad":
         subprocess.Popen(["notepad.exe", str(target)])
     else:
         _startfile(target)
@@ -289,7 +342,7 @@ def open_app(app):
 
 def open_folder(name="", app=None):
     try:
-        target = safe_path(name)
+        target = safe_user_path(name)
         if not target.is_dir():
             return _err(f"A pasta não existe: {target}")
         _open_with(target, app)
@@ -300,10 +353,11 @@ def open_folder(name="", app=None):
 
 def open_file(name, app=None):
     try:
-        target = safe_path(name)
+        target = safe_user_path(name)
         if not target.is_file():
             return _err(f"O arquivo não existe: {target}")
-        _check_ext(target)
+        if target.suffix.lower() in OPEN_BLOCKED_EXT:
+            return _err(f"Por segurança, não abro executáveis/scripts do sistema diretamente: {target.suffix}")
         _open_with(target, app)
         return _ok(f"Arquivo aberto: {target}", path=str(target))
     except Exception as e:
@@ -409,7 +463,7 @@ def create_zip(src, dst):
 
 def search_files(query, root="", extension=""):
     try:
-        base=safe_path(root)
+        base=safe_user_path(root)
         if not base.is_dir(): return _err(f"A pasta não existe: {base}")
         q=str(query or '').strip().lower()
         ext=str(extension or '').strip().lower()
@@ -419,7 +473,9 @@ def search_files(query, root="", extension=""):
             if not item.is_file() or item.name.startswith('.'): continue
             if q and q not in item.name.lower(): continue
             if ext and item.suffix.lower()!=ext: continue
-            found.append({'nome':item.name,'path':str(item.relative_to(JARVIS_HOME)),'bytes':item.stat().st_size,'ext':item.suffix.lower()})
+            try: display_path=str(item.relative_to(JARVIS_HOME))
+            except ValueError: display_path=str(item)
+            found.append({'nome':item.name,'path':display_path,'bytes':item.stat().st_size,'ext':item.suffix.lower()})
             if len(found)>=100: break
         return _ok(f"{len(found)} resultado(s)", query=q, itens=found, truncated=len(found)>=100)
     except Exception as e:
@@ -504,7 +560,7 @@ def read_file(name):
 
 def list_files(name=""):
     try:
-        target = safe_path(name)
+        target = safe_user_path(name)
         if not target.is_dir():
             return _err(f"A pasta não existe: {target}")
         items = []

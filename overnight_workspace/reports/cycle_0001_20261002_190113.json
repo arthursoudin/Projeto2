@@ -1,0 +1,149 @@
+{
+  "cycle": 1,
+  "timestamp": "2026-10-02T19:01:13",
+  "roles": {
+    "qualidade": "Avalia qualidade, legibilidade, arquitetura, testes e possíveis regressões.",
+    "web": "Pesquisa boas práticas e exemplos públicos atuais relacionados ao problema encontrado.",
+    "seguranca": "Revisa defensivamente autenticação, autorização, segredos, validação, SSRF, path traversal e exposição de dados.",
+    "red_team": "Cria cenários de ataque hipotéticos e seguros para que o agente de segurança possa verificar. Não executa ataques nem fornece exploração operacional.",
+    "testes": "Executa testes locais seguros, checa sintaxe e procura falhas reproduzíveis sem destruir dados.",
+    "melhorias": "Consolida achados, prioriza melhorias e escreve propostas sem modificar a produção."
+  },
+  "tests": {
+    "ok": false,
+    "returncode": 1,
+    "stdout": "",
+    "stderr": "C:\\Users\\20260026-IEG\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe: No module named pytest\n"
+  },
+  "compile": {
+    "ok": true,
+    "errors": []
+  },
+  "static_security": [
+    {
+      "rule": "requests_sem_timeout",
+      "file": "app.py"
+    },
+    {
+      "rule": "eval_exec",
+      "file": "core.py"
+    },
+    {
+      "rule": "requests_sem_timeout",
+      "file": "core.py"
+    },
+    {
+      "rule": "eval_exec",
+      "file": "jarvis_core.py"
+    },
+    {
+      "rule": "requests_sem_timeout",
+      "file": "jarvis_core.py"
+    },
+    {
+      "rule": "requests_sem_timeout",
+      "file": "overnight_agents.py"
+    },
+    {
+      "rule": "requests_sem_timeout",
+      "file": "store.py"
+    },
+    {
+      "rule": "requests_sem_timeout",
+      "file": "uptime_loop.py"
+    },
+    {
+      "rule": "requests_sem_timeout",
+      "file": "voice_io.py"
+    },
+    {
+      "rule": "requests_sem_timeout",
+      "file": "whatsapp.py"
+    },
+    {
+      "rule": "requests_sem_timeout",
+      "file": "local_agent\\agent.py"
+    },
+    {
+      "rule": "requests_sem_timeout",
+      "file": "skills\\app.py"
+    },
+    {
+      "rule": "eval_exec",
+      "file": "skills\\core.py"
+    },
+    {
+      "rule": "requests_sem_timeout",
+      "file": "skills\\core.py"
+    },
+    {
+      "rule": "requests_sem_timeout",
+      "file": "skills\\overnight_agents.py"
+    },
+    {
+      "rule": "requests_sem_timeout",
+      "file": "skills\\store.py"
+    },
+    {
+      "rule": "requests_sem_timeout",
+      "file": "skills\\uptime_loop.py"
+    },
+    {
+      "rule": "requests_sem_timeout",
+      "file": "skills\\voice_io.py"
+    },
+    {
+      "rule": "requests_sem_timeout",
+      "file": "skills\\whatsapp.py"
+    },
+    {
+      "rule": "requests_sem_timeout",
+      "file": "tools\\app.py"
+    },
+    {
+      "rule": "eval_exec",
+      "file": "tools\\core.py"
+    },
+    {
+      "rule": "requests_sem_timeout",
+      "file": "tools\\core.py"
+    },
+    {
+      "rule": "requests_sem_timeout",
+      "file": "tools\\overnight_agents.py"
+    },
+    {
+      "rule": "requests_sem_timeout",
+      "file": "tools\\store.py"
+    },
+    {
+      "rule": "requests_sem_timeout",
+      "file": "tools\\uptime_loop.py"
+    },
+    {
+      "rule": "requests_sem_timeout",
+      "file": "tools\\voice_io.py"
+    },
+    {
+      "rule": "requests_sem_timeout",
+      "file": "tools\\whatsapp.py"
+    },
+    {
+      "rule": "requests_sem_timeout",
+      "file": "tools\\local_agent\\agent.py"
+    },
+    {
+      "rule": "requests_sem_timeout",
+      "file": "skills\\local_agent\\agent.py"
+    }
+  ],
+  "quality": "**Resumo da avaliação (máximo 5 problemas)**  \n\n| # | Problema concreto | Arquivo(s) afetado(s) | Prioridade* | Impacto de segurança/qualidade |\n|---|-------------------|----------------------|------------|--------------------------------|\n| 1 | **Uso de `eval`/`exec`** sem validação de conteúdo | `core.py`, `jarvis_core.py`, `skills/core.py`, `tools/core.py` | **Alta** | Permite execução arbitrária de código se algum dado controlado pelo usuário chegar a essas funções – vulnerabilidade de execução remota (RCE). |\n| 2 | **Chamadas HTTP com `requests` sem timeout** | `app.py`, `core.py`, `jarvis_core.py`, `overnight_agents.py`, `store.py`, `uptime_loop.py`, `voice_io.py`, `whatsapp.py` e réplicas em `skills/*` e `tools/*` | **Alta** | Falha de disponibilidade (Denial‑of‑Service) e possibilidade de bloqueio indefinido da thread/processo. |\n| 3 | **Código duplicado em três hierarquias (`root`, `skills/`, `tools/`)** | Praticamente todos os módulos (ex.: `app.py`, `core.py`, `gateway.py`, `voice_io.py`, etc.) | **Média** | Aumenta a superfície de manutenção; correções em um local podem não ser propagadas, gerando inconsistências e bugs latentes. |\n| 4 | **Arquivos monolíticos** – `app.py` com **≈120 KB** e `jarvis_core.py` com **≈22 KB** | `app.py`, `jarvis_core.py` | **Média** | Dificulta leitura, teste unitário e auditoria; favorece a introdução de regressões. |\n| 5 | **Falha de CI – dependência ausente (`pytest`)** | Nenhum arquivo de código, mas impede a execução dos testes automatizados (`testes.returncode = 1`). | **Baixa** (operacional) | Impede a validação contínua da qualidade; pode mascarar regressões ou vulnerabilidades. |\n\n\\*Prioridade baseada no **risco de segurança** (Alta), **probabilidade de falha em produção** (Média) e **impacto operacional** (Baixa).\n\n---\n\n### Detalhamento rápido dos pontos críticos\n\n1. **`eval`/`exec`**  \n   - As linhas que invocam `eval`/`exec` não apresentam sanitização nem whitelist de comandos.  \n   - Exemplo típico (pseudocódigo): `result = eval(user_input)` – se algum parâmetro de API ou mensagem de chat for encaminhado até lá, um atacante pode injetar código Python arbitrário.  \n   - **Mitigação recomendada:** substituir por parsers seguros, usar funções específicas ao invés de avaliação dinâmica, ou, no mínimo, validar estritamente a origem e o conteúdo da string.\n\n2. **`requests` sem timeout**  \n   - Chamadas como `requests.get(url)` ou `requests.post(url, data)` aparecem em dezenas de módulos.  \n   - Sem `timeout=` a aplicação pode ficar bloqueada indefinidamente caso o endpoint remoto falhe ou seja alvo de ataque de lentidão.  \n   - **Mitigação recomendada:** padronizar um wrapper (`http_get(url, **kw)`) que sempre define `timeout=5` (ou valor configurável) e trate exceções (`requests.exceptions.Timeout`).\n\n3. **Duplicação de código**  \n   - Estrutura de diretórios (`root/`, `skills/`, `tools/`) contém cópias idênticas de quase todos os módulos.  \n   - Isso indica falta de um mecanismo de *package* ou *module alias* e aumenta o risco de divergência.  \n   - **Mitigação recomendada:** consolidar o código em um único pacote (ex.: `jarvis/`) e usar importações relativas; remover diretórios redundantes.\n\n4. **Arquivos monolíticos**  \n   - `app.py` concentra lógica de roteamento, inicialização, configuração e chamadas de negócio.  \n   - Tamanhos acima de 100 KB dificultam revisão e cobertura de teste.  \n   - **Mitigação recomendada:** refatorar em módulos menores (ex.: `router.py`, `config.py`, `services/*.py`) seguindo o princípio de responsabilidade única.\n\n5. **Ambiente de teste incompleto**  \n   - O runner tenta executar `pytest` mas o módulo não está instalado (`No module named pytest`).  \n   - Embora não seja uma vulnerabilidade, impede a execução automática de testes de regressão.  \n   - **Mitigação recomendada:** incluir `pytest` no `requirements.txt` ou usar um *virtual environment* com as dependências corretas no CI.\n\n---\n\n### Próximos passos sugeridos (ordenados por prioridade)\n\n1. **Corrigir `eval`/`exec`** – auditoria completa das funções que os utilizam e substituição por lógica segura.  \n2. **Adicionar timeout padrão** a todas as chamadas `requests` (pode ser feito via wrapper).  \n3. **Eliminar duplicação** – mover código para um único pacote e atualizar importações.  \n4. **Dividir arquivos grandes** em módulos menores, facilitando testes unitários e revisão.  \n5. **Instalar `pytest`** (e demais dev‑deps) no ambiente de CI para garantir que a suíte de testes seja executada.  \n\nEssas ações abordam os riscos mais críticos primeiro (execução arbitrária e indisponibilidade) e, em seguida, melhoram a manutenibilidade e a confiabilidade do projeto.",
+  "security": "## Revisão Defensiva de Segurança  \n**Escopo:** Projeto Python “Jarvis” (todos os módulos sob `.` , `skills/` e `tools/`).  \n**Base:** Relatório estático entregue – 31 ocorrências de duas regras:\n\n| Regra | Descrição da regra | Arquivos afetados |\n|-------|--------------------|-------------------|\n| **requests_sem_timeout** | Chamadas à biblioteca **requests** sem parâmetro `timeout`. | `app.py`, `core.py`, `jarvis_core.py`, `overnight_agents.py`, `store.py`, `uptime_loop.py`, `voice_io.py`, `whatsapp.py`, `local_agent/agent.py` e suas réplicas em `skills/` e `tools/`. |\n| **eval_exec** | Uso de **eval()**, **exec()** ou funções equivalentes que executam código arbitrário. | `core.py`, `jarvis_core.py`, `skills/core.py`, `tools/core.py`. |\n\nNenhum outro erro de sintaxe foi encontrado e o projeto falhou ao rodar os testes porque o ambiente não tem **pytest** instalado – isso não afeta a análise de segurança, mas indica que a cadeia de CI/CD pode estar incompleta.\n\nA seguir, cada categoria é validada conceitualmente, o risco associado é descrito e são propostas correções e testes seguros.\n\n---\n\n## 1. Chamadas HTTP sem Timeout (`requests_sem_timeout`)\n\n### 1.1 Conceito\nA biblioteca `requests` usa sockets bloqueantes por padrão. Quando `timeout` não é especificado, a chamada pode ficar pendente indefinidamente (ex.: servidor fora, rede lenta, ataque de “slowloris”). Isso pode:\n\n* **Exaurir recursos** (threads, processos, memória) e causar negação de serviço interno.  \n* **Bloquear fluxos críticos** (ex.: loops de monitoramento, orquestração de agentes).  \n* **Facilitar exploração de recursos externos** (ex.: redirecionamento a hosts controlados pelo atacante).\n\n### 1.2 Validação dos arquivos\nA regra encontrou chamadas `requests.get/post/...` em 27 arquivos diferentes. A maioria desses módulos são “gateways”, “voice_io”, “whatsapp” e “store”, que interagem com APIs externas (por exemplo, serviços de mensagens, bancos de dados remotos, APIs de voz). Não há indícios de que algum desses módulos já implemente timeout em camada superior (ex.: wrapper próprio). Portanto, a vulnerabilidade é plausível.\n\n### 1.3 Recomendações de correção\n1. **Definir timeout padrão** em um único ponto (ex.: `security.py` ou `config.py`).  \n   ```python\n   # security.py\n   DEFAULT_TIMEOUT = 5  # segundos – ajuste conforme SLA\n\n   def request_with_timeout(method, url, **kwargs):\n       kwargs.setdefault('timeout', DEFAULT_TIMEOUT)\n       return requests.request(method, url, **kwargs)\n   ```\n2. **Substituir chamadas diretas** por `request_with_timeout` ou passar explicitamente `timeout=` em cada chamada.  \n3. **Tratar exceções** (`requests.exceptions.Timeout`, `ConnectionError`) e implementar **retry** com back‑off exponencial quando apropriado.  \n4. **Auditar** se algum módulo usa `session.get/post` – aplicar o mesmo padrão ao objeto `Session`.  \n\n### 1.4 Testes seguros\n| Tipo de teste | Objetivo | Como executar (exemplo) |\n|---------------|----------|--------------------------|\n| **Unitário** | Verificar que todas as funções que chamam `requests` recebem `timeout`. | ```python\\nimport ast, pathlib\\nfiles = pathlib.Path('.').rglob('*.py')\\nfor f in files:\\n    tree = ast.parse(f.read_text())\\n    for node in ast.walk(tree):\\n        if isinstance(node, ast.Call) and getattr(node.func, 'attr', '') in {'get','post','put','delete','request'}:\\n            has_timeout = any(k.arg == 'timeout' for k in node.keywords)\\n            assert has_timeout, f\\\"{f}:{node.lineno} missing timeout\\\"\\n``` |\n| **Integração** | Simular endpoint que nunca responde e garantir que o processo não fica bloqueado > timeout. | Use `http.server` em modo “hang” ou `responses` mock que levanta `requests.exceptions.Timeout`. |\n| **Carga** | Executar loops de `uptime_loop`/`overnight_agents` com 100 chamadas paralelas a um endpoint lento e medir uso de CPU/memória. | Ferramenta: `locust` ou `pytest‑asyncio` + `asyncio.wait_for`. |\n| **Fuzz de URL** | Enviar URLs mal‑formadas ou com redirecionamento infinito e confirmar que o código aborta. | `hypothesis` com estratégia `urls()` + mock de `requests`. |\n\n---\n\n## 2. Uso de `eval` / `exec` (`eval_exec`)\n\n### 2.1 Conceito\n`eval()` e `exec()` avaliam strings como código Python. Quando a string provém de entrada externa (arquivo, API, usuário, mensagem de chat), um atacante pode injetar código arbitrário, levando a:\n\n* **Execução remota de código (RCE)** – controle total do processo.  \n* **Escalada de privilégio** (se o processo roda como root ou com credenciais sensíveis).  \n* **Exfiltração de dados** (leitura de arquivos, variáveis de ambiente).  \n\nMesmo que a origem pareça “confiável”, a prática é considerada **anti‑pattern** e deve ser evitada ou fortemente sanitizada.\n\n### 2.2 Validação dos arquivos\nA regra apontou `eval`/`exec` nos seguintes módulos:\n\n| Arquivo | Contexto provável (com base no nome) |\n|---------|--------------------------------------|\n| `core.py` / `skills/core.py` / `tools/core.py` | Lógica central de “comandos” ou “plugins”. |\n| `jarvis_core.py` | Wrapper de alto nível que pode interpretar mensagens de voz ou texto. |\n\nSem analisar o código linha a linha, a presença nesses módulos sugere que strings vindas de **mensagens de usuário**, **arquivos de configuração** ou **payloads de APIs** podem ser avaliadas dinamicamente para “extensibilidade”. Isso é um ponto de ataque clássico.\n\n### 2.3 Recomendações de correção\n1. **Eliminar `eval/exec`** sempre que possível. Substituir por:\n   * **Mapeamento estático** de comandos → funções (ex.: dicionário `COMMANDS = {\"ping\": ping_func, ...}`).\n   * **Importação dinâmica segura** usando `importlib.import_module` e `getattr`, mas apenas com nomes validados contra uma whitelist.\n2. **Se a avaliação for indispensável** (ex.: expressão matemática do usuário):\n   * Use bibliotecas de sandbox como **`asteval`**, **`numexpr`** ou **`simpleeval`**, que limitam o AST permitido.\n   * **Sanitizar** a string: remover built‑ins, atributos, chamadas a `__import__`, etc.\n3. **Validar a origem** da string antes de qualquer avaliação:\n   ```python\n   ALLOWED_COMMANDS = {\"status\", \"restart\", \"shutdown\"}   # whitelist\n   def safe_execute(command_name, *args):\n       if command_name not in ALLOWED_COMMANDS:\n           raise ValueError(\"Comando não permitido\")\n       return COMMANDS[command_name](*args)\n   ```\n4. **Aplicar princípio do menor privilégio**: o processo que executa código dinâmico deve rodar em um contêiner ou sandbox com recursos limitados (cgroup, seccomp, AppArmor).\n\n### 2.4 Testes seguros\n| Tipo de teste | Objetivo | Como executar |\n|---------------|----------|----------------|\n| **Unitário de whitelist** | Garantir que apenas comandos permitidos são aceitos. | ```python\\nimport pytest\\nfrom core import safe_execute\\nwith pytest.raises(ValueError):\\n    safe_execute('os.system', 'ls')\\n``` |\n| **Fuzz de payload** | Injetar strings maliciosas (`__import__('os').system('rm -rf /')`) e confirmar que a aplicação rejeita ou lança exceção. | Use `hypothesis` com estratégia `text()` e mock de `eval` para detectar chamadas. |\n| **Sandbox audit** | Verificar que o processo não tem permissão para abrir sockets ou arquivos críticos quando executa código “dinâmico”. | Execute o módulo em um contêiner Docker com `--cap-drop=ALL` e `seccomp` restrito; monitorar syscalls com `strace`. |\n| **Static analysis** | Garantir que não restam chamadas a `eval`/`exec` após refatoração. | Ferramenta: `bandit` (rule B307) ou `pylint` com `bad-functions=eval,exec`. |\n\n---\n\n## 3. Outras Observações\n\n| Item | Comentário |\n|------|------------|\n| **Ausência de pytest** | O CI falhou porque `pytest` não está instalado. Recomenda‑se incluir `pytest` (e plugins como `pytest‑cov`, `hypothesis`) nas dependências de desenvolvimento (`dev-requirements.txt`). |\n| **Duplicação de código** | Muitos módulos são espelhados em `skills/` e `tools/`. Centralizar lógica comum (ex.: wrappers de `requests`, funções de segurança) reduz a superfície de erro. |\n| **Configurações sensíveis** | Verifique se arquivos como `config.json` ou `.env` contêm credenciais em texto plano. Caso existam, adote **dotenv** e **secrets manager**. |\n| **Logging** | Assegure que mensagens de erro não vazem detalhes de exceções (stack traces) para usuários finais. Use níveis apropriados (`logging.INFO`/`WARNING`). |\n| **Dependências** | Rode `pip-audit` ou `safety` para identificar vulnerabilidades em bibliotecas de terceiros (ex.: `requests`, `flask`, `fastapi`). |\n\n---\n\n## 4. Plano de Ação Resumido\n\n| Passo | Ação | Responsável | Prazo sugerido |\n|------|------|-------------|----------------|\n| 1 | Criar módulo `security.py` com `DEFAULT_TIMEOUT` e wrapper `request_with_timeout`. | Dev backend | 1 dia |\n| 2 | Refatorar todas as chamadas `requests.*` para usar o wrapper ou passar `timeout=` explicitamente. | Dev backend | 2 dias |\n| 3 | Substituir `eval/exec` por whitelist de comandos ou usar biblioteca de avaliação segura. | Dev backend + segurança | 3 dias |\n| 4 | Adicionar testes unitários de timeout e de whitelist (ex.: `tests/test_security.py`). | QA / Dev | 1 dia |\n| 5 | Configurar CI para instalar `pytest` e executar a nova suíte de testes. | DevOps | 1 dia |\n| 6 | Executar análise estática com `bandit` e `pylint` como parte do pipeline. | DevOps | 1 dia |\n| 7 | Revisar política de execução (Docker/Podman) para limitar privilégios do processo. | Infra / Segurança | 2 dias |\n| 8 | Documentar mudanças em `README` e `SECURITY.md`. | Docs | 1 dia |\n\n---\n\n## 5. Conclusão\n\nOs achados estáticos são **reais e críticos**: chamadas HTTP sem timeout podem causar negação de serviço, e o uso de `eval`/`exec` abre caminho para execução remota de código. As correções propostas são simples de implementar (adicionar timeout padrão, remover avaliação dinâmica) e podem ser validadas com testes automatizados que não exigem exploração real. Ao aplicar as recomendações e integrar os testes ao pipeline CI, o projeto ganhará robustez contra vetores de ataque comuns e melhorará a confiabilidade operacional.",
+  "red_team": "**Cenário 1 – Reconhecimento de API pública**  \n*Hipótese*: Um ator externo tenta mapear os endpoints expostos pelo serviço (por exemplo, `/app.py`, `/security.py`, `/whatsapp.py`).  \n**O que verificar**:  \n- Lista completa de rotas públicas e documentação (OpenAPI/Swagger) está limitada ao mínimo necessário.  \n- Respostas de erro não revelam detalhes internos (stack traces, caminhos de arquivos, versões de bibliotecas).  \n- Cabeçalhos de segurança (CORS, CSP, HSTS, X‑Content‑Type‑Options, X‑Frame‑Options) estão configurados.  \n- Taxa de requisições (rate‑limit) está aplicada para impedir varredura massiva.\n\n---\n\n**Cenário 2 – Injeção de código em funções que utilizam `eval`/`exec`**  \n*Hipótese*: Um atacante tenta enviar dados que são avaliados dinamicamente por funções encontradas em `core.py`, `jarvis_core.py` ou seus equivalentes em *skills*.  \n**O que verificar**:  \n- Todas as entradas que chegam a `eval`/`exec` são validadas ou sanitizadas (tipo, comprimento, lista branca de expressões).  \n- Uso de ambientes restritos (e.g., `ast.literal_eval` ou sandbox) ao invés de avaliação arbitrária.  \n- Logs de chamadas a essas funções são auditados e alertam sobre valores inesperados.  \n- Cobertura de testes unitários que simulam strings mal‑formadas e verificam que a exceção é tratada.\n\n---\n\n**Cenário 3 – Falha de timeout em chamadas HTTP externas**  \n*Hipótese*: Um red‑team simula um serviço externo que nunca responde, explorando a ausência de timeout nas chamadas `requests` encontradas em vários módulos (`app.py`, `voice_io.py`, `whatsapp.py`, etc.).  \n**O que verificar**:  \n- Cada chamada `requests.*` define explicitamente `timeout` (valor razoável, ex.: 5‑10 s).  \n- Exceções de timeout são capturadas e tratadas de forma a não bloquear o processo principal.  \n- Métricas de latência e circuit‑breaker estão implementadas para degradar graciosamente o serviço.  \n- Testes de carga que simulam latência alta confirmam que o sistema permanece responsivo.\n\n---\n\n**Cenário 4 – Manipulação de arquivos de configuração ou credenciais**  \n*Hipótese*: Um atacante tenta ler ou sobrescrever arquivos como `local_agent/config.json`, `catalog.json` ou outros arquivos JSON que contêm chaves ou parâmetros sensíveis.  \n**O que verificar**:  \n- Permissões de arquivo no sistema de arquivos limitam leitura/escrita apenas ao usuário de execução da aplicação.  \n- Dados sensíveis (tokens, senhas) nunca são armazenados em texto plano; utilizam secret manager ou criptografia.  \n- Validação de integridade (hash, assinatura) ao carregar arquivos de configuração.  \n- Logs de acesso a esses arquivos são monitorados e alertam sobre alterações inesperadas.\n\n---\n\n**Cenário 5 – Abuso de funcionalidades de automação/execução remota**  \n*Hipótese*: Um usuário autenticado tenta abusar de módulos como `automation.py`, `pc_control.py` ou `v19_command_os.py` para executar comandos arbitrários ou iniciar processos não autorizados.  \n**O que verificar**:  \n- Controle de acesso baseado em papéis (RBAC) restringe quem pode invocar funções de automação ou execução de comandos.  \n- Cada comando recebido passa por whitelist de comandos permitidos e por sanitização de parâmetros.  \n- Todas as execuções são registradas com usuário, timestamp, comando e resultado; auditoria periódica desses logs.  \n- Mecanismo de aprovação (ex.: 2FA ou aprovação manual) para operações de alto risco.  \n\n---  \n\nEsses cinco cenários fornecem pontos de verificação que permitem ao time de segurança validar a robustez do sistema sem precisar executar exploits reais. Cada verificação pode ser implementada como testes automatizados ou revisões de código/configuração.",
+  "web_examples": [
+    {
+      "error": "web indisponível: ModuleNotFoundError: No module named 'bs4'"
+    }
+  ],
+  "improvements": "**Backlog de melhorias (máx 8 itens) – qualidade, segurança, testes e exemplos Web**  \n\n| # | Melhoria proposta | Prioridade* | Motivo (impacto) | Arquivo(s)‑alvo (provável) | Teste de aceitação (seguro) |\n|---|-------------------|------------|------------------|----------------------------|-----------------------------|\n| 1 | **Remover/ substituir todas as chamadas a `eval`/`exec`** por lógica baseada em whitelist ou parser seguro. | Alta | Elimina risco de execução remota de código (RCE). | `core.py`, `jarvis_core.py`, `skills/core.py`, `tools/core.py` | Unit‑test que tenta executar `eval(\"import os; os.system('rm -rf /')\")` através da API pública e verifica que a chamada lança `ValueError`/`SecurityError` e não executa nenhum comando. |\n| 2 | **Padronizar timeout nas requisições HTTP** usando um wrapper que define `timeout=5 s` (valor configurável). | Alta | Prevê bloqueio indefinido da thread/processo → DoS interno. | Qualquer módulo que use `requests.*` (ex.: `app.py`, `voice_io.py`, `whatsapp.py`, `store.py`, `overnight_agents.py`, `skills/*`, `tools/*`). | Teste de integração que mocka `requests.get` para nunca responder; o wrapper deve levantar `requests.exceptions.Timeout` em ≤ 5 s e o fluxo principal deve continuar (ex.: loga erro e segue). |\n| 3 | **Criar módulo central `http_client.py`** que exporta `get`, `post`, etc. com timeout e tratamento de exceções; substituir importações diretas. | Média | Reduz duplicação, facilita manutenção e auditoria. | Todos os módulos que importam `requests` diretamente. | Verificar, via análise estática (AST), que nenhum `requests.get/ post/ …` aparece fora de `http_client.py`. |\n| 4 | **Dividir arquivos monolíticos** (`app.py`, `jarvis_core.py`) em módulos menores (ex.: `router.py`, `config.py`, `services/*.py`). | Média | Facilita leitura, cobertura de teste unitário e revisão de código. | `app.py`, `jarvis_core.py` | Teste de aceitação: a aplicação ainda inicia (`python -m app`) e responde ao endpoint `/health` com código 200. Cobertura de teste unitário ≥ 80 % nas novas sub‑módulos. |\n| 5 | **Adicionar dependência de teste (`pytest`) ao CI** (ex.: `requirements-dev.txt` ou `pyproject.toml`). | Baixa (operacional) | Permite execução automática da suíte de testes; evita falsos‑positivos. | Nenhum código‑fonte; apenas configuração CI. | CI executa `pytest -q` e finaliza com código 0. |\n| 6 | **Implementar testes de API Web seguros** usando `requests` com timeout e `responses` (mock). | Média | Garante que endpoints públicos não vazam informações sensíveis e respeitam limites de tempo. | `app.py` (ou módulo que expõe rotas). | Teste que chama `/api/version` (mockado) e verifica: <ul><li>tempo de resposta ≤ 2 s;</li><li>corpo JSON contém apenas `version` e `status`;</li><li>cabeçalhos `Server`, `X‑Powered‑By` não são expostos.</li></ul> |\n| 7 | **Sanitizar logs de erro** – remover stack‑traces e caminhos de arquivos das respostas HTTP 4xx/5xx. | Média | Evita vazamento de detalhes internos a atacantes. | `app.py`, `security.py` (onde o tratamento de exceções ocorre). | Teste que simula erro interno (ex.: `raise RuntimeError`) e verifica que a resposta contém apenas `\"error\": \"internal server error\"` e não menciona `Traceback` ou caminhos de arquivo. |\n| 8 | **Aplicar política de menor privilégio** – executar o processo dentro de um contêiner Docker com `seccomp` restrito e sem capabilities desnecessárias. | Média | Limita o impacto caso algum vetor de ataque seja explorado. | Arquivo de implantação (`Dockerfile` ou `docker-compose.yml`). | Teste de aceitação: `docker run --rm <imagem>` inicia sem falhas; `docker inspect` mostra que `CapDrop` inclui `ALL` e que o perfil `seccomp` está ativo. |\n\n\\*Prioridade baseada no risco de segurança (Alta), probabilidade de falha em produção (Média) e impacto operacional (Baixa).\n\n---\n\n### Exemplos de testes Web seguros (para itens 6 e 7)\n\n```python\nimport pytest, requests, responses\n\nBASE_URL = \"http://localhost:8000\"\n\n@responses.activate\ndef test_version_endpoint():\n    # Mocka a resposta do endpoint\n    responses.add(\n        responses.GET,\n        f\"{BASE_URL}/api/version\",\n        json={\"version\": \"1.2.3\", \"status\": \"ok\"},\n        status=200,\n        headers={\"Content-Type\": \"application/json\"},\n    )\n    r = requests.get(f\"{BASE_URL}/api/version\", timeout=2)\n    assert r.status_code == 200\n    assert r.json() == {\"version\": \"1.2.3\", \"status\": \"ok\"}\n    # Verifica ausência de cabeçalhos sensíveis\n    for hdr in (\"Server\", \"X-Powered-By\"):\n        assert hdr not in r.headers\n\n@responses.activate\ndef test_error_hides_details():\n    # Simula erro interno\n    responses.add(\n        responses.GET,\n        f\"{BASE_URL}/api/bad\",\n        body=\"RuntimeError: something went wrong\",\n        status=500,\n    )\n    r = requests.get(f\"{BASE_URL}/api/bad\", timeout=2)\n    assert r.status_code == 500\n    # O corpo deve ser genérico, sem stack‑trace\n    assert \"error\" in r.text.lower()\n    assert \"traceback\" not in r.text.lower()\n    assert \"/app.py\" not in r.text\n```\n\n*Os testes acima utilizam **`responses`** (mock de `requests`) e **timeout** para garantir que a aplicação não bloqueie o teste e que não exponha informações internas.*\n\n---\n\n### Como usar o backlog\n\n1. **Priorize as duas primeiras linhas (RCE e DoS)** – são as únicas vulnerabilidades críticas encontradas.  \n2. **Implemente o wrapper HTTP** (itens 2 e 3) antes de refatorar arquivos grandes; isso já reduz a duplicação e permite inserir o timeout de forma centralizada.  \n3. **Adicione a suíte de testes** (itens 5‑8) ao pipeline CI; assim, as correções podem ser validadas continuamente.  \n4. **Itere**: após cada commit, execute a bateria de testes acima; só então avance para a próxima melhoria.\n\nSeguindo este plano, o projeto ganha **segurança** (elimina RCE e DoS), **qualidade** (código modular e testável) e **confiabilidade operacional** (CI com testes automatizados e ambiente restrito)."
+}

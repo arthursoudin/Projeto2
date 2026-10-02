@@ -203,6 +203,12 @@ def _parse_clause(t, ctx):
         if ctx.get('last') == 'file' and ctx.get('file'):
             return ('open_file', {'name': ctx['file'], **({'app': app} if app else {})})
 
+    # abrir caminho absoluto do Windows, por exemplo: "abra C:\\Users\\Nome\\Documents\\projeto\\app.py"
+    m = re.search(r'\b(?:abra|abrir|abre)\s+((?:[A-Za-z]:[\\/]|\\\\)[^\n]+)$', t, re.I)
+    if m:
+        raw=m.group(1).strip().rstrip(' .!?')
+        return ('open_file' if re.search(r'\.[A-Za-z0-9]{1,8}$', raw) else 'open_folder', {'name': raw})
+
     # abrir pasta / arquivo
     for noun, action in (('pasta', 'open_folder'), ('arquivo', 'open_file')):
         if re.search(rf'\b(?:abra|abrir|abre)\s+(?:(?:a|o|essa|esse)\s+)?{noun}\b', t, re.I):

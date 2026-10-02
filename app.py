@@ -29,7 +29,7 @@ client=OpenAI(base_url='https://openrouter.ai/api/v1',api_key=API_KEY) if API_KE
 
 import store, voice_io, hashlib, tempfile
 import v19_command_os as v19
-DEFAULTS={'messages':[],'tasks':[],'memory':{},'last_action':None,'session_id':uuid.uuid4().hex,'honcho_status':'não configurado','honcho_context':'','pending_pc':None,'mic_n':0,'last_audio_hash':''}
+DEFAULTS={'messages':[],'tasks':[],'memory':{},'last_action':None,'session_id':uuid.uuid4().hex,'honcho_status':'não configurado','honcho_context':'','pending_pc':None,'mic_n':0,'last_audio_hash':'','hud_open_file':'','hud_open_folder':'','hud_focus':'CORE','hud_modules':[],'hud_events':[],'hud_workspace':'','hud_last_result':{},'hud_last_prompt':''}
 for k,v in DEFAULTS.items():
     if k not in st.session_state: st.session_state[k]=v
 
@@ -42,6 +42,67 @@ def load_json(path,default):
 def save_json(path,data):
     try: return store.save(_skey(path),data)
     except Exception: return False
+
+
+def _hud_event(label, detail, kind='info'):
+    item={'time':dt.datetime.now().strftime('%H:%M:%S'),'label':str(label)[:60],'detail':str(detail or '')[:180],'kind':kind}
+    events=st.session_state.get('hud_events',[])
+    st.session_state.hud_events=(events+[item])[-12:]
+    return item
+
+
+def _hud_module(name):
+    modules=st.session_state.get('hud_modules',[])
+    if name not in modules:
+        modules.append(name)
+    st.session_state.hud_modules=modules[-8:]
+
+
+def update_hud_from_action(action, result, prompt=''):
+    """Atualiza o HUD com base no que o Jarvis realmente executou."""
+    st.session_state.hud_last_prompt=str(prompt or '')
+    st.session_state.hud_last_result=result if isinstance(result,dict) else {'message':str(result or '')}
+    action=str(action or '')
+    raw=result if isinstance(result,dict) else {}
+    nested=raw.get('result') if isinstance(raw.get('result'),dict) else raw
+    ok=bool(raw.get('ok', nested.get('ok', False)))
+    message=str(nested.get('message') or nested.get('error') or raw.get('error') or raw.get('message') or '')
+    if action in ('open_file','read_file','document_info','download_file') or nested.get('path') and str(action).endswith('file'):
+        path=str(nested.get('path') or '')
+        if path:
+            st.session_state.hud_open_file=path
+            st.session_state.hud_focus='FILE'
+            _hud_module('FILES')
+    if action in ('open_folder','list_files','create_folder','create_workspace'):
+        path=str(nested.get('path') or '')
+        if path:
+            st.session_state.hud_open_folder=path
+            st.session_state.hud_focus='WORKSPACE'
+            _hud_module('WORKSPACE')
+    if action in ('open_app','open_url','search_web'):
+        _hud_module('CONTROL')
+        st.session_state.hud_focus='CONTROL'
+    if action in ('create_file','append_file','move_path','copy_path','rename_path'):
+        path=str(nested.get('path') or nested.get('dst') or '')
+        if path: st.session_state.hud_workspace=path
+        _hud_module('FILES'); st.session_state.hud_focus='FILES'
+    if action in ('system_info','list_apps'):
+        _hud_module('SYSTEM'); st.session_state.hud_focus='SYSTEM'
+    if action in ('schedule_add','schedule_list','schedule_remove','schedule_toggle'):
+        _hud_module('AUTOMATION'); st.session_state.hud_focus='AUTOMATION'
+    if action in ('delete_path',):
+        _hud_module('SECURITY'); st.session_state.hud_focus='SECURITY'
+    kind='ok' if ok else 'error'
+    _hud_event(action.replace('_',' ').upper(),message or ('Concluído' if ok else 'Falhou'),kind)
+
+
+def _hud_image_data():
+    try:
+        img=Path(__file__).resolve().parent/'assets'/'jarvis_core.png'
+        if img.exists(): return base64.b64encode(img.read_bytes()).decode('ascii')
+    except Exception:
+        pass
+    return ''
 def refresh_state(force=False):
     """Relê tarefas/memória sem bloquear cada envio do chat.
     O armazenamento compartilhado é atualizado no máximo a cada 8s, salvo force=True.
@@ -219,13 +280,47 @@ def execute_tool(text):
 def system_prompt(memory_context=''):
     return '''Você é Jarvis, assistente pessoal em português do Brasil. Seja direto, inteligente, útil e honesto. Use memória e tarefas como contexto, sem inventar fatos. Se algo estiver incerto, diga isso. Quando uma ferramenta já tiver executado uma ação, explique o resultado sem fingir que fará outra ação.\nSkills: %s\nControle local do PC: somente por agente autorizado e ações permitidas. Rotinas agendadas rodam no PC pelo agente local, mesmo com o app fechado. Só diga que algo foi feito se o resultado da ferramenta tiver ok=true; se houver erro, explique o erro e como resolver. Se estiver AGUARDANDO CONFIRMAÇÃO, nada foi executado ainda.\nMemória local: %s\nTarefas: %s\nResumo de tarefas: %s\nMemória Honcho recuperada: %s\nÚltimas ações no PC: %s\nPerfil do PC: %s''' % (json.dumps(list(SKILLS),ensure_ascii=False),json.dumps(st.session_state.memory,ensure_ascii=False),json.dumps(st.session_state.tasks,ensure_ascii=False),json.dumps(task_summary(),ensure_ascii=False),memory_context or 'nenhuma',json.dumps(st.session_state.pc_history[-8:],ensure_ascii=False),json.dumps(st.session_state.pc_profile,ensure_ascii=False))
 
+def _llm_message_text(message):
+    """Extrai texto de respostas OpenAI/OpenRouter sem permitir None + str."""
+    if message is None:
+        return ''
+    if isinstance(message, dict):
+        content=message.get('content')
+        if content is None:
+            content=message.get('reasoning')
+    else:
+        content=getattr(message,'content',None)
+        if content is None:
+            content=getattr(message,'reasoning',None)
+    if content is None:
+        return ''
+    if isinstance(content,str):
+        return content.strip()
+    if isinstance(content,list):
+        parts=[]
+        for item in content:
+            if isinstance(item,dict):
+                text=item.get('text') or item.get('content')
+                if text is not None: parts.append(str(text))
+            else:
+                text=getattr(item,'text',None)
+                if text is not None: parts.append(str(text))
+        return ''.join(parts).strip()
+    return str(content).strip()
+
+
 def ask_llm(user_text,tool_result=None,memory_context=''):
     if not client: return 'OPENROUTER_API_KEY não configurada.'
     msgs=[{'role':'system','content':system_prompt(memory_context)}]+st.session_state.messages[-12:]
     if tool_result: msgs.append({'role':'system','content':f'Resultado da ferramenta executada: {tool_result}'})
     msgs.append({'role':'user','content':user_text})
     max_tokens=int(os.getenv('OPENROUTER_MAX_TOKENS','600'))
-    r=client.chat.completions.create(model=MODEL,messages=msgs,temperature=0.4,max_tokens=max_tokens); return r.choices[0].message.content
+    r=client.chat.completions.create(model=MODEL,messages=msgs,temperature=0.4,max_tokens=max_tokens)
+    choices=getattr(r,'choices',None) or []
+    if not choices:
+        return 'O modelo não retornou nenhuma escolha de resposta.'
+    text=_llm_message_text(getattr(choices[0],'message',None))
+    return text or 'O modelo retornou uma resposta vazia. Verifique o modelo configurado no OpenRouter.'
 
 VOICES=['pt-BR-AntonioNeural','pt-BR-FranciscaNeural']
 SPEEDS={'Lenta':'-15%','Normal':None,'Rápida':'+15%'}
@@ -299,7 +394,7 @@ def queue_pc_action(action, params=None, wait_seconds=15, target_device_id=None)
         r=requests.post(f'{GATEWAY_URL}/agent/commands', json=payload, headers=headers, timeout=10)
         if r.status_code not in (200,201):
             try:
-                err=r.json().get('detail',r.text); v19.finish_operation(op['id'],False,error=err); return {'ok':False,'error':err}
+                err=r.json().get('detail',r.text); v19.finish_operation(op['id'],False,error=err); update_hud_from_action(action, {'ok':False,'error':err}); return {'ok':False,'error':err}
             except Exception:
                 v19.finish_operation(op['id'],False,error=r.text); return {'ok':False,'error':r.text}
         queued=r.json()
@@ -307,7 +402,7 @@ def queue_pc_action(action, params=None, wait_seconds=15, target_device_id=None)
             v19.finish_operation(op['id'],False,error='pending_approval')
             return {'ok':False,'pending_approval':True,'approval':queued.get('approval'),'action':action,'message':'Ação enviada para aprovação de segurança.'}
         if not queued.get('ok') or not queued.get('command_id'):
-            v19.finish_operation(op['id'],False,error=str(queued)[:800]); return queued
+            v19.finish_operation(op['id'],False,error=str(queued)[:800]); update_hud_from_action(action, queued); return queued
         command_id=queued['command_id']
         import time
         deadline=time.time()+max(3,int(wait_seconds))
@@ -317,11 +412,11 @@ def queue_pc_action(action, params=None, wait_seconds=15, target_device_id=None)
             for item in rr.json().get('results',[]):
                 if item.get('command_id')==command_id:
                     res=item.get('result') or {}
-                    ok=bool(res.get('ok', item.get('ok'))); v19.finish_operation(op['id'],ok,result=res,error=res.get('error')); return {'ok':ok,'command_id':command_id,'action':action,'result':res}
+                    ok=bool(res.get('ok', item.get('ok'))); v19.finish_operation(op['id'],ok,result=res,error=res.get('error')); update_hud_from_action(action, {'ok':ok,'result':res}); return {'ok':ok,'command_id':command_id,'action':action,'result':res}
             time.sleep(poll_delay)
-        err='O agente local não respondeu no tempo esperado. Verifique se start_agent.bat está aberto.'; v19.finish_operation(op['id'],False,error=err); return {'ok':False,'command_id':command_id,'action':action,'error':err}
+        err='O agente local não respondeu no tempo esperado. Verifique se start_agent.bat está aberto.'; v19.finish_operation(op['id'],False,error=err); update_hud_from_action(action, {'ok':False,'error':err}); return {'ok':False,'command_id':command_id,'action':action,'error':err}
     except Exception as e:
-        v19.finish_operation(op['id'],False,error=f'{type(e).__name__}: {e}'); return {'ok':False,'error':str(e)}
+        v19.finish_operation(op['id'],False,error=f'{type(e).__name__}: {e}'); update_hud_from_action(action, {'ok':False,'error':str(e)}); return {'ok':False,'error':str(e)}
 
 from pc_control import parse_pc_commands, PERMISSIONS, CONFIRM_ACTIONS, describe_step, is_confirm, is_cancel
 
@@ -554,6 +649,27 @@ button[kind="secondary"]{border-color:rgba(255,59,48,.18)!important}button[kind=
 @media(max-width:1000px){.refined-center{min-height:430px}.refined-orb{width:300px;height:300px}}
 </style>
 
+<style>
+:root{--j-cyan:#34d9ff;--j-blue:#0e7ea0;--j-bg:#02070b;--j-panel:rgba(4,14,22,.88);--j-line:rgba(52,217,255,.20);--j-muted:#6b8794;--j-good:#52f0c4;--j-warn:#ffd45a}
+[data-testid="stAppViewContainer"],body{background:radial-gradient(circle at 50% 28%,#0a202a 0%,#03080d 40%,#010305 80%)!important}
+.refined-top{border-color:rgba(52,217,255,.23)!important;background:linear-gradient(180deg,#06141d,#02080c)!important;box-shadow:0 0 30px rgba(52,217,255,.07)!important}
+.refined-brand i,.refined-title,.refined-brand{color:#dffbff!important}.refined-brand i{color:var(--j-cyan)!important}.refined-system b{color:var(--j-good)!important}.refined-sub{color:#5b7a87!important}
+.refined-dock .stPopover>button{background:#031017!important;border-color:rgba(52,217,255,.17)!important;color:#83a7b5!important}.refined-dock .stPopover>button:hover{border-color:rgba(52,217,255,.55)!important;color:#bbf5ff!important}
+.refined-card,.refined-ai,.hud-chatbox{border-color:rgba(52,217,255,.15)!important;background:linear-gradient(180deg,rgba(4,15,23,.92),rgba(2,7,11,.95))!important;box-shadow:inset 0 0 25px rgba(52,217,255,.018),0 0 24px rgba(52,217,255,.025)!important}
+.refined-row{border-color:rgba(52,217,255,.065)!important;color:#668290!important}.refined-row b{color:#d7f5fb!important}.refined-ok{color:var(--j-good)!important}.refined-warn{color:var(--j-warn)!important}.refined-bad{color:#ff7890!important}
+.refined-center{min-height:540px!important}.refined-grid{background:linear-gradient(rgba(52,217,255,.02) 1px,transparent 1px),linear-gradient(90deg,rgba(52,217,255,.02) 1px,transparent 1px)!important;background-size:34px 34px!important}
+.refined-orb{background:radial-gradient(circle,rgba(52,217,255,.09) 0 18%,transparent 19%),repeating-radial-gradient(circle,transparent 0 38px,rgba(52,217,255,.14) 39px 40px)!important;border-color:rgba(52,217,255,.34)!important;box-shadow:0 0 75px rgba(52,217,255,.12),inset 0 0 55px rgba(52,217,255,.06)!important}
+.refined-orb:before{border-color:rgba(52,217,255,.26)!important}.refined-orb:after{background:linear-gradient(transparent,#34d9ff,transparent)!important;box-shadow:0 0 11px #34d9ff!important}.refined-ring{border-color:rgba(52,217,255,.22)!important}.refined-ring.r2{border-color:rgba(82,240,196,.22)!important}.refined-core-image{width:148px;height:148px;border-radius:50%;overflow:hidden;border:1px solid rgba(52,217,255,.50);background:#02080c;box-shadow:0 0 38px rgba(52,217,255,.19),inset 0 0 28px rgba(52,217,255,.10);z-index:3;display:flex;align-items:center;justify-content:center}.refined-core-image img{width:100%;height:100%;object-fit:cover;mix-blend-mode:screen;filter:contrast(1.06) saturate(.9) drop-shadow(0 0 10px rgba(52,217,255,.25))}.refined-core-label{position:absolute;bottom:-2.2rem;color:#7ec9da;font:600 .54rem monospace;letter-spacing:.22em;text-shadow:0 0 12px rgba(52,217,255,.35)}.refined-caption{color:#587581!important}.refined-ai-head{color:#7dddf3!important}.refined-ai-orb{border-color:rgba(52,217,255,.50)!important;background:radial-gradient(circle,#063141,#04090c 70%)!important;color:#b9f3ff!important;box-shadow:0 0 30px rgba(52,217,255,.15)!important}.refined-loop span{border-color:rgba(52,217,255,.18)!important}.refined-loop i{color:var(--j-cyan)!important}.refined-feed-item{border-color:rgba(52,217,255,.07)!important}.refined-feed-item em{color:#66e9f2!important}.hud-msg-ai{border-left-color:rgba(82,240,196,.55)!important}.hud-msg-user{border-left-color:rgba(52,217,255,.55)!important}.hud-msg span{color:#6bdff6!important}.hud-chatbox-scroll::-webkit-scrollbar-thumb{background:#0d5e73}
+
+.jarvis-hero{position:relative;min-height:245px;display:grid;grid-template-columns:1.15fr 1fr 1.15fr;gap:1rem;align-items:center;border:1px solid rgba(52,217,255,.18);border-radius:10px;padding:1rem 1.15rem;margin:.25rem 0 .75rem;background:radial-gradient(circle at 50% 55%,rgba(52,217,255,.08),transparent 32%),linear-gradient(180deg,rgba(4,18,26,.92),rgba(1,7,11,.95));overflow:hidden;box-shadow:inset 0 0 80px rgba(52,217,255,.018),0 0 35px rgba(52,217,255,.04)}
+.jarvis-hero-grid{position:absolute;inset:0;background:linear-gradient(rgba(52,217,255,.02) 1px,transparent 1px),linear-gradient(90deg,rgba(52,217,255,.02) 1px,transparent 1px);background-size:26px 26px;mask-image:radial-gradient(circle at 50% 50%,black,transparent 72%);pointer-events:none}
+.jarvis-hero-left,.jarvis-hero-right{position:relative;z-index:2}.jarvis-kicker{font:600 .51rem monospace;letter-spacing:.19em;color:#5e93a2;text-transform:uppercase}.jarvis-greeting{font:800 1.9rem/1.05 system-ui;color:#eafcff;margin:.35rem 0}.jarvis-greeting span{color:#64dff5;text-shadow:0 0 20px rgba(52,217,255,.25)}.jarvis-focus{color:#7b98a4;font:600 .54rem monospace;letter-spacing:.12em}.jarvis-focus b{color:#c7f5ff}.jarvis-runtime{display:grid;grid-template-columns:1fr auto;gap:.38rem .6rem;width:max-content;margin-top:1rem;color:#547683;font:600 .49rem monospace;letter-spacing:.09em}.jarvis-runtime b{color:#d6fbff}.jarvis-runtime b.good{color:var(--j-good)}.jarvis-runtime b.warn{color:var(--j-warn)}.jarvis-runtime.compact{grid-template-columns:auto auto auto auto;width:100%;margin-top:.8rem}.jarvis-runtime.compact span:nth-of-type(2){margin-left:.35rem}.jarvis-hero-right{border-left:1px solid rgba(52,217,255,.10);padding-left:1rem}.jarvis-activity{color:#d8f9ff;font:500 .73rem/1.4 system-ui;min-height:46px;padding:.45rem 0}.jarvis-chip-wrap{display:flex;flex-wrap:wrap;gap:.3rem}.jarvis-chip-wrap span{border:1px solid rgba(52,217,255,.17);background:rgba(4,22,31,.55);color:#6faabb;padding:.25rem .38rem;border-radius:999px;font:600 .46rem monospace;letter-spacing:.09em}.jarvis-hero-core{position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:210px}.hero-orbit{position:absolute;border-radius:50%;border:1px solid rgba(52,217,255,.15);animation:jarvisSpin 11s linear infinite}.hero-orbit.o1{width:190px;height:190px}.hero-orbit.o2{width:145px;height:145px;border-style:dashed;animation-direction:reverse;animation-duration:8s}.hero-scan{position:absolute;width:210px;height:210px;border-radius:50%;background:conic-gradient(from 0deg,transparent 0 70%,rgba(52,217,255,.24) 74%,transparent 82%);animation:jarvisSpin 5s linear infinite;filter:blur(.2px)}.hero-image{width:122px;height:122px;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;border:1px solid rgba(52,217,255,.48);background:#02080b;box-shadow:0 0 38px rgba(52,217,255,.22),inset 0 0 30px rgba(52,217,255,.12);position:relative;z-index:3}.hero-image img{width:100%;height:100%;object-fit:cover;mix-blend-mode:screen}.hero-letter{color:#7ee7fa;font:800 2.5rem system-ui;text-shadow:0 0 20px rgba(52,217,255,.55)}.hero-core-label{margin-top:8.5rem;position:absolute;color:#75cde0;font:600 .48rem monospace;letter-spacing:.26em;text-shadow:0 0 16px rgba(52,217,255,.25)}
+.jarvis-context{display:grid;grid-template-columns:auto 1fr auto;gap:.7rem;align-items:center;padding:.55rem .8rem;margin:-.15rem 0 .65rem;border:1px solid rgba(52,217,255,.20);border-radius:8px;background:linear-gradient(180deg,rgba(4,18,26,.88),rgba(2,8,12,.95));box-shadow:0 0 20px rgba(52,217,255,.04)}.jarvis-context>div{display:flex;align-items:center;gap:.4rem}.jarvis-context b{color:#c9f6ff;font-size:.58rem;letter-spacing:.13em}.jarvis-context small{color:#4f8797;font:.45rem monospace}.jarvis-context code{color:#85d9ea;font:.58rem monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ctx-dot{width:7px;height:7px;border-radius:50%;background:#55f1c8;box-shadow:0 0 11px #55f1c8}.ctx-status{color:#5da9bb;font:600 .47rem monospace;letter-spacing:.12em}
+.refined-log{padding:.28rem 0;border-bottom:1px solid rgba(52,217,255,.06)}.refined-log:last-child{border-bottom:0}.refined-log b{font:600 .45rem monospace;color:#527582;margin-right:.3rem}.refined-log span{color:#73c5d8;font:600 .5rem monospace;letter-spacing:.05em}.refined-log p{margin:.12rem 0 0;color:#718d99;font-size:.52rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@keyframes jarvisSpin{to{transform:rotate(360deg)}}
+@media(max-width:1000px){.jarvis-hero{grid-template-columns:1fr;min-height:0}.jarvis-hero-right{border-left:0;border-top:1px solid rgba(52,217,255,.10);padding-left:0;padding-top:.8rem}.jarvis-hero-core{order:-1;min-height:210px}.jarvis-context{grid-template-columns:1fr}.jarvis-context code{white-space:normal}.refined-center{min-height:420px!important}}
+</style>
+
 <div class="jarvis-topbar" style="display:none"><div class="jarvis-brand"><span>J</span>ARVIS // COMMAND OS</div><div class="jarvis-nav"><b>CORE</b><span>AGENTS</span><span>DEVICES</span><span>MISSIONS</span><span>MEMORY</span><span>SECURITY</span></div><div class="jarvis-clock">SYSTEM ONLINE • V{APP_VERSION}</div></div>
 ''', unsafe_allow_html=True)
 st.title('JARVIS // COMMAND OS'); st.caption('Central de comando • Agentes • Dispositivos • Missões • Memória • Segurança • Automação')
@@ -693,13 +809,13 @@ with tabs[1]:
         with st.chat_message('assistant'):
             try:
                 if team_answer:
-                    answer=team_answer + confirm_note
+                    answer=str(team_answer or '') + confirm_note
                 elif tool == 'computer':
-                    answer=format_pc_fast(result) + confirm_note
+                    answer=str(format_pc_fast(result) or '') + confirm_note
                 elif tool in ('calculator','time','task','complete_task','delete_task','memory') and result is not None:
                     answer=str(result) + confirm_note
                 else:
-                    answer=ask_llm(prompt,result,context) + confirm_note
+                    answer=str(ask_llm(prompt,result,context) or '') + confirm_note
                 st.markdown(answer)
                 st.session_state.messages.append({'role':'assistant','content':answer})
                 # Salvar cada turno no Honcho pode adicionar uma chamada de rede ao envio.
@@ -1161,11 +1277,19 @@ with tabs[0]:
     try: _live = live_operations.snapshot(limit=8)
     except Exception: _live = {'current':None,'running':[],'recent':[],'event_count':len(_events)}
     _notifications = notifications.build_notifications(agent=_agent, security=_sec, missions=_missions, tasks=st.session_state.tasks, events=_events, live=_live)
+    _hud_img=_hud_image_data()
+    _hud_modules=st.session_state.get('hud_modules',[])
+    _hud_focus=st.session_state.get('hud_focus','CORE')
+    _hud_file=st.session_state.get('hud_open_file','')
+    _hud_folder=st.session_state.get('hud_open_folder','')
+    _hud_last_prompt=st.session_state.get('hud_last_prompt','')
     _running=[m for m in _missions if m.get('status')=='running']; _done=[m for m in _missions if m.get('status') in ('done','completed','success')]; _failed=[m for m in _missions if m.get('status')=='failed']
     _online_devices=[d for d in _devices if d.get('status')=='online']; _info=_agent.get('info') or {}; _online=bool(_agent.get('online')); _pending=int(_sec.get('pending',0) or 0); _kill=bool(_sec.get('kill_switch'))
     _current=_live.get('current') or {}; _cur_status=str(_current.get('status','idle')).upper(); _cur_agent=str(_current.get('agent') or 'SYSTEM')[:24]; _cur_action=str(_current.get('instruction') or _current.get('result') or 'Aguardando uma missão...')[:100]; _dur=_current.get('duration_ms'); _dur_text=f'{float(_dur)/1000:.1f}s' if isinstance(_dur,(int,float)) else '--'
 
-    st.markdown('<div class="refined-top"><div class="refined-brand"><i>J</i>ARVIS // COMMAND OS</div><div class="refined-sub">CORE • AGENT LOOP • TOOLS • LIVE OPERATIONS</div><div class="refined-system"><b>●</b> SYSTEM ONLINE • V{APP_VERSION}</div></div>',unsafe_allow_html=True)
+    st.markdown('<div class="refined-top"><div class="refined-brand"><i>J</i>ARVIS</div><div class="refined-sub">PERSONAL AI • COMPUTER CONTROL • MEMORY • AGENTS</div><div class="refined-system"><b>●</b> ONLINE • LOCAL AGENT '+('CONNECTED' if _online else 'WAITING')+'</div></div>',unsafe_allow_html=True)
+    _hero_img=(f'data:image/png;base64,{_hud_img}' if _hud_img else '')
+    st.markdown(f'''<div class="jarvis-hero"><div class="jarvis-hero-grid"></div><div class="jarvis-hero-left"><div class="jarvis-kicker">J.A.R.V.I.S // PERSONAL CORE</div><div class="jarvis-greeting">Olá. <span>Estou pronto.</span></div><div class="jarvis-focus">FOCO ATUAL <b>{_hud_focus}</b></div><div class="jarvis-runtime"><span>CORE</span><b>ONLINE</b><span>LOCAL AGENT</span><b class="{'good' if _online else 'warn'}">{'ONLINE' if _online else 'AGUARDANDO'}</b></div></div><div class="jarvis-hero-core"><div class="hero-orbit o1"></div><div class="hero-orbit o2"></div><div class="hero-scan"></div><div class="hero-image">{('<img src="'+_hero_img+'" />') if _hero_img else '<div class="hero-letter">J</div>'}</div><div class="hero-core-label">J.A.R.V.I.S</div></div><div class="jarvis-hero-right"><div class="jarvis-kicker">AUTONOMOUS WORKSPACE</div><div class="jarvis-activity">{(_hud_last_prompt or 'Aguardando seu comando...')[:110]}</div><div class="jarvis-chip-wrap">{''.join(f'<span>{m}</span>' for m in (_hud_modules[-5:] or ['CORE']))}</div><div class="jarvis-runtime compact"><span>MISSÕES</span><b>{len(_running):02d}</b><span>TAREFAS</span><b>{task_summary()['pendentes']:02d}</b></div></div></div>''',unsafe_allow_html=True)
     st.markdown('<div class="refined-dock">',unsafe_allow_html=True); d=st.columns([1,1,1,1,1,1,1,1,1,1.15])
     with d[0]:
         with st.popover('SYSTEM'):
@@ -1290,14 +1414,22 @@ with tabs[0]:
             st.markdown('**MISSIONS**'); st.write(f"Running: **{len(_running)}**"); st.write(f"Done: **{len(_done)}**"); st.write(f"Failed: **{len(_failed)}**")
     st.markdown('</div>',unsafe_allow_html=True)
 
+    # Contexto que aparece somente quando o Jarvis passa a controlar algo.
+    if _hud_file or _hud_folder or st.session_state.get('hud_workspace'):
+        _p=_hud_file or _hud_folder or st.session_state.get('hud_workspace','')
+        _kind='ARQUIVO ABERTO' if _hud_file else ('PASTA ATIVA' if _hud_folder else 'WORKSPACE')
+        _safe=_p.replace('<','&lt;').replace('>','&gt;')
+        st.markdown(f'''<div class="jarvis-context"><div><span class="ctx-dot"></span><b>{_kind}</b><small>JARVIS CONTROL</small></div><code>{_safe}</code><span class="ctx-status">{('CONNECTED' if _online else 'OFFLINE')}</span></div>''',unsafe_allow_html=True)
     # V13.3.4 — AI panel moved to the left; chat uses a fixed-height scroll viewport.
     left,center,right=st.columns([1.0,1.55,1.18])
     with left:
         st.markdown(f'''<div class="refined-ai"><div class="refined-ai-head"><span>JARVIS AI</span><span>AGENT LOOP • TOOLS</span></div><div class="refined-ai-orb">J</div><div class="refined-ai-status"><b>{_cur_agent}</b> • {_cur_status}</div><div class="refined-ai-action">{_cur_action}</div><div class="refined-loop"><span>PLANNER</span><i>→</i><span>AGENT</span><i>→</i><span>TOOLS</span><i>→</i><span>VERIFY</span></div></div>''',unsafe_allow_html=True)
         st.markdown(f'''<div class="refined-card"><div class="refined-title">SYSTEM STATUS</div><div class="refined-row"><span>CORE</span><b class="refined-ok">ONLINE</b></div><div class="refined-row"><span>LOCAL AGENT</span><b class="{'refined-ok' if _online else 'refined-bad'}">{'ONLINE' if _online else 'OFFLINE'}</b></div><div class="refined-row"><span>SECURITY</span><b class="{'refined-bad' if _kill else 'refined-ok'}">{'LOCKED' if _kill else 'ACTIVE'}</b></div><div class="refined-row"><span>APPROVALS</span><b class="refined-warn">{_pending:02d}</b></div></div>''',unsafe_allow_html=True)
         st.markdown(f'''<div class="refined-card"><div class="refined-title">TELEMETRY</div><div class="refined-row"><span>CPU</span><b>{_info.get('cpu_percent','—')}%</b></div><div class="refined-row"><span>RAM</span><b>{_info.get('ram_em_uso_percent','—')}%</b></div><div class="refined-row"><span>DEVICES</span><b>{len(_online_devices)}/{len(_devices)}</b></div><div class="refined-row"><span>EVENTS</span><b>{len(_events):04d}</b></div></div>''',unsafe_allow_html=True)
+        st.markdown('<div class="refined-card"><div class="refined-title">AUTONOMY LOG</div>'+''.join(f'<div class="refined-log"><b>{e.get("time","--:--")}</b><span>{e.get("label","EVENT")}</span><p>{e.get("detail","")}</p></div>' for e in reversed(st.session_state.get("hud_events",[])[:6]))+'<div></div></div>',unsafe_allow_html=True)
     with center:
-        st.markdown(f'''<div class="refined-center"><div class="refined-grid"></div><div class="refined-orb"><div class="refined-ring r3"></div><div class="refined-ring r1"></div><div class="refined-ring r2"></div><div class="refined-core"><strong>{len(_running):02d}</strong><span>ACTIVE</span></div></div><div class="refined-caption">JARVIS CORE • {len(_running):02d} ACTIVE MISSIONS • V{APP_VERSION}</div></div>''',unsafe_allow_html=True)
+        _center_img=f'<img src="data:image/png;base64,{_hud_img}" />' if _hud_img else '<div class="hero-letter">J</div>'
+        st.markdown(f'''<div class="refined-center"><div class="refined-grid"></div><div class="refined-orb jarvis-live-orb"><div class="refined-ring r3"></div><div class="refined-ring r1"></div><div class="refined-ring r2"></div><div class="refined-core-image">{_center_img}</div><div class="refined-core-label">J.A.R.V.I.S</div></div><div class="refined-caption">JARVIS CORE • {len(_running):02d} ACTIVE MISSIONS • FOCUS { _hud_focus } • V{APP_VERSION}</div></div>''',unsafe_allow_html=True)
         st.markdown(f'''<div class="refined-card"><div class="refined-title">CURRENT OPERATION</div><div class="refined-row"><span>AGENT</span><b>{_cur_agent}</b></div><div class="refined-row"><span>STATUS</span><b class="refined-warn">{_cur_status}</b></div><div class="refined-row"><span>DURATION</span><b>{_dur_text}</b></div><div style="color:#766b6b;font-size:.57rem;margin-top:.5rem;line-height:1.4">{_cur_action}</div></div>''',unsafe_allow_html=True)
     with right:
         if 'hud_ai_history' not in st.session_state:
@@ -1320,16 +1452,37 @@ with tabs[0]:
             voice_send=cvoice.form_submit_button('VOZ',use_container_width=True)
         if (send or voice_send) and ai_prompt.strip():
             try:
-                tool,tool_result=execute_tool(ai_prompt.strip())
-                memory_context=honcho_context(ai_prompt.strip())
-                answer=ask_llm(ai_prompt.strip(),tool_result,memory_context)
-                # Do not truncate history. Only the visual viewport is limited.
-                st.session_state.hud_ai_history=st.session_state.get('hud_ai_history',[])+[{'q':ai_prompt.strip(),'a':answer}]
-                honcho_save_turn(ai_prompt.strip(),answer)
-                if voice_send:
-                    speak(answer)
+                q=ai_prompt.strip(); st.session_state.hud_last_prompt=q
+                tool,tool_result=None,None
+                steps=parse_pc_commands(q)
+                if steps:
+                    done,status=run_pc_plan(steps)
+                    tool='computer'; tool_result=json.dumps({'acoes':done,'status':status},ensure_ascii=False)
+                elif is_devices_intent(q):
+                    tool='computer'; tool_result=json.dumps(connected_devices_fast(),ensure_ascii=False)
+                    _hud_module('DEVICES'); st.session_state.hud_focus='SYSTEM'; _hud_event('DEVICES',str(tool_result)[:180])
+                elif wants_team(q):
+                    out=run_team(strip_trigger(q)); tool='equipe'; tool_result=json.dumps(out.get('trace',[]),ensure_ascii=False)[:5000]
+                    _hud_module('AGENTS'); st.session_state.hud_focus='AGENTS'; _hud_event('AGENT LOOP',out.get('reply','Equipe executada.'))
+                else:
+                    tool,tool_result=execute_tool(q)
+                    if tool=='task': _hud_module('TASKS'); st.session_state.hud_focus='TASKS'
+                    elif tool in ('memory','memory_search'): _hud_module('MEMORY'); st.session_state.hud_focus='MEMORY'
+                    elif tool=='web': _hud_module('CONTROL'); st.session_state.hud_focus='CONTROL'
+                    elif tool: _hud_event(tool.upper(),str(tool_result)[:180])
+                memory_context=honcho_context(q) if HONCHO_API_KEY else ''
+                if tool=='computer':
+                    answer=format_pc_fast(json.loads(tool_result) if isinstance(tool_result,str) else tool_result)
+                elif tool in ('calculator','time','task','complete_task','delete_task','memory') and tool_result is not None:
+                    answer=str(tool_result)
+                else:
+                    answer=ask_llm(q,tool_result,memory_context)
+                st.session_state.hud_ai_history=st.session_state.get('hud_ai_history',[])+[{'q':q,'a':answer}]
+                honcho_save_turn(q,answer)
+                if voice_send: speak(answer)
                 st.rerun()
             except Exception as e:
+                _hud_event('ERRO',f'{type(e).__name__}: {e}','error')
                 st.error(f'Erro no Jarvis: {e}')
         st.markdown('<div class="refined-card"><div class="refined-title">LIVE OPERATIONS</div>',unsafe_allow_html=True)
         for x in (_live.get('recent') or [])[:4]: st.markdown(f'''<div class="refined-feed-item"><b>{str(x.get('started_at',''))[11:19] or '--:--:--'}</b> {str(x.get('agent') or 'SYSTEM')[:15]} <em>{str(x.get('status',''))[:9].upper()}</em><p>{str(x.get('instruction') or x.get('result') or '')[:80]}</p></div>''',unsafe_allow_html=True)

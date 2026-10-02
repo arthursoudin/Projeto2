@@ -1,0 +1,36 @@
+{
+  "cycle": 4,
+  "started_at": "2026-10-02T18:59:22",
+  "last_cycle": "2026-10-02T19:26:27",
+  "status": "running",
+  "history": [
+    {
+      "cycle": 1,
+      "timestamp": "2026-10-02T19:01:13",
+      "tests_ok": false,
+      "compile_ok": true,
+      "report": "reports\\cycle_0001_20261002_190113.json"
+    },
+    {
+      "cycle": 2,
+      "timestamp": "2026-10-02T19:12:08",
+      "tests_ok": false,
+      "compile_ok": true,
+      "report": "reports\\cycle_0002_20261002_191208.json"
+    },
+    {
+      "cycle": 3,
+      "timestamp": "2026-10-02T19:19:16",
+      "tests_ok": false,
+      "compile_ok": true,
+      "report": "reports\\cycle_0003_20261002_191916.json"
+    },
+    {
+      "cycle": 4,
+      "timestamp": "2026-10-02T19:26:27",
+      "tests_ok": false,
+      "compile_ok": true,
+      "report": "reports\\cycle_0004_20261002_192627.json"
+    }
+  ]
+}

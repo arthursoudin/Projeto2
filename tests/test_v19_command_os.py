@@ -2,7 +2,6 @@ import sys, os, tempfile
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 os.environ['JARVIS_STORE_DIR']=tempfile.mkdtemp(prefix='jarvis_v19_test_')
 import v19_command_os as v
-
 def test_seed(): assert len(v.list_agents()) >= 10
 
 def test_agent_factory():
