@@ -1,4 +1,4 @@
-import os, json, asyncio, datetime as dt, uuid, re, base64
+import os, json, asyncio, datetime as dt, uuid, re, base64, unicodedata, time
 from pathlib import Path
 import streamlit as st
 from openai import OpenAI
@@ -39,9 +39,16 @@ def load_json(path,default):
 def save_json(path,data):
     try: return store.save(_skey(path),data)
     except Exception: return False
-def refresh_state():
-    """Relê tarefas, memória e histórico do armazenamento (WhatsApp e site compartilham os mesmos dados).
-    Se a leitura falhar, mantém o que já está na sessão (nunca zera por erro de rede)."""
+def refresh_state(force=False):
+    """Relê tarefas/memória sem bloquear cada envio do chat.
+    O armazenamento compartilhado é atualizado no máximo a cada 8s, salvo force=True.
+    Se a leitura falhar, mantém o que já está na sessão."""
+    now_ts=time.time()
+    # Arquivo local é rápido; no Supabase, limite leituras de rede para não travar o chat.
+    remote_store = bool(getattr(store, 'enabled', lambda: False)())
+    if remote_store and not force and now_ts-st.session_state.get('_last_state_refresh',0) < 8:
+        return
+    st.session_state['_last_state_refresh']=now_ts
     for key,path,typ in (('tasks',TASKS_FILE,list),('memory',MEMORY_FILE,dict)):
         d=load_json(path,None)
         if isinstance(d,typ): st.session_state[key]=d
@@ -214,7 +221,8 @@ def ask_llm(user_text,tool_result=None,memory_context=''):
     msgs=[{'role':'system','content':system_prompt(memory_context)}]+st.session_state.messages[-12:]
     if tool_result: msgs.append({'role':'system','content':f'Resultado da ferramenta executada: {tool_result}'})
     msgs.append({'role':'user','content':user_text})
-    r=client.chat.completions.create(model=MODEL,messages=msgs,temperature=0.4); return r.choices[0].message.content
+    max_tokens=int(os.getenv('OPENROUTER_MAX_TOKENS','600'))
+    r=client.chat.completions.create(model=MODEL,messages=msgs,temperature=0.4,max_tokens=max_tokens); return r.choices[0].message.content
 
 VOICES=['pt-BR-AntonioNeural','pt-BR-FranciscaNeural']
 SPEEDS={'Lenta':'-15%','Normal':None,'Rápida':'+15%'}
@@ -294,13 +302,14 @@ def queue_pc_action(action, params=None, wait_seconds=15, target_device_id=None)
         command_id=queued['command_id']
         import time
         deadline=time.time()+max(3,int(wait_seconds))
+        poll_delay=0.20
         while time.time() < deadline:
-            rr=requests.get(f'{GATEWAY_URL}/agent/results',headers=headers,timeout=10); rr.raise_for_status()
+            rr=requests.get(f'{GATEWAY_URL}/agent/results',headers=headers,timeout=5); rr.raise_for_status()
             for item in rr.json().get('results',[]):
                 if item.get('command_id')==command_id:
                     res=item.get('result') or {}
                     return {'ok':bool(res.get('ok', item.get('ok'))),'command_id':command_id,'action':action,'result':res}
-            time.sleep(1)
+            time.sleep(poll_delay)
         return {'ok':False,'command_id':command_id,'action':action,'error':'O agente local não respondeu no tempo esperado. Verifique se start_agent.bat está aberto.'}
     except Exception as e:
         return {'ok':False,'error':str(e)}
@@ -356,7 +365,7 @@ def run_team(goal):
 
 def is_pc_intent(text):
     """Detecta pedidos de controle local antes do LLM para evitar respostas genéricas de 'não tenho acesso'."""
-    n=unidecode(str(text or '')).lower() if unidecode else str(text or '').lower()
+    n=unicodedata.normalize('NFKD', str(text or '')).encode('ascii','ignore').decode('ascii').lower()
     keys=(
         'no meu pc','no computador','no meu computador','no notebook','na minha maquina',
         'abrir chrome','abra chrome','abre chrome','abrir navegador','abra o navegador','abre o navegador',
@@ -371,7 +380,7 @@ def is_pc_intent(text):
 
 def pc_clarification(text):
     """Responde a intenções locais incompletas sem deixar o LLM inventar limitações."""
-    n=unidecode(str(text or '')).lower() if unidecode else str(text or '').lower()
+    n=unicodedata.normalize('NFKD', str(text or '')).encode('ascii','ignore').decode('ascii').lower()
     browser_words=('chrome','navegador','pagina','página','site')
     if any(w in n for w in browser_words) and not re.search(r'https?://|\bwww\.|\b[a-z0-9-]+\.(?:com|br|org|net|io|dev|app|ai)\b', n):
         return 'Qual página ou site você quer que eu abra? Pode me passar o endereço, por exemplo: "abra https://example.com no Chrome".'
@@ -484,7 +493,8 @@ with st.sidebar:
     st.header('Sistema'); st.metric('Modelo',MODEL.split('/')[-1][:24]); st.metric('Skills',len(SKILLS)); st.metric('Tarefas',len(st.session_state.tasks)); st.metric('Pendentes',task_summary()['pendentes']); st.metric('Memórias locais',len(st.session_state.memory)); st.write('**PC Agent:**', 'configurado' if (GATEWAY_URL and LOCAL_AGENT_TOKEN) else 'não configurado')
     _stt=store.status(); st.caption(('✅ ' if _stt['ok'] and _stt['backend']=='supabase' else '⚠️ ')+'Armazenamento: '+_stt['backend']+' — '+_stt['detalhe'])
     with st.expander('🔊 Voz'):
-        st.toggle('Responder em voz',value=True,key='speak_on')
+        _voice_default=os.getenv('JARVIS_VOICE_DEFAULT','0').strip().lower() in ('1','true','yes','on')
+        st.toggle('Responder em voz',value=_voice_default,key='speak_on')
         st.selectbox('Voz',[VOICE]+[v for v in VOICES if v!=VOICE],key='voice_name')
         st.selectbox('Velocidade',list(SPEEDS),index=1,key='voice_speed')
         st.caption('🎤 Microfone: '+voice_io.status_text())
@@ -522,6 +532,37 @@ with tabs[1]:
         audio=st.audio_input('🎤 Fale com o Jarvis: grave, envie e ele responde em voz',key=f"mic_{st.session_state.mic_n}")
     else:
         audio=None; st.caption('🎤 Para falar pelo microfone, configure OPENROUTER_API_KEY no Render.' if not voice_io.configured() else '🎤 Atualize o Streamlit para usar o microfone.')
+    def format_pc_fast(raw):
+        """Resposta curta e imediata para ações do PC, sem chamar o LLM."""
+        if isinstance(raw, str):
+            return raw
+        if not isinstance(raw, dict):
+            return str(raw or 'Concluído.')
+        if raw.get('pending_approval'):
+            return 'A ação foi enviada para aprovação de segurança. Nada foi executado ainda.'
+        acoes=raw.get('acoes') or []
+        if not acoes:
+            return raw.get('error') or raw.get('message') or 'Nada foi executado.'
+        lines=[]
+        for item in acoes:
+            ok=item.get('ok')
+            desc=item.get('acao') or 'ação'
+            res=item.get('resultado')
+            if isinstance(res,dict):
+                msg=res.get('message') or res.get('error') or ''
+                if res.get('computer'): msg += f" — {res.get('computer')}"
+                if res.get('os'): msg += f" — {res.get('os')}"
+                if res.get('processor'): msg += f" — {res.get('processor')}"
+                if res.get('ram_total_gb') is not None: msg += f" — RAM {res.get('ram_total_gb')} GB"
+                res=msg.strip()
+            elif res is None:
+                res=''
+            prefix='✓' if ok else '✕'
+            lines.append(f"{prefix} {desc}" + (f": {res}" if res else ''))
+        if raw.get('status')=='confirm':
+            lines.append('Aguardando sua confirmação. Nada sensível foi executado.')
+        return '\n'.join(lines)
+
     prompt=st.chat_input('Fale com o Jarvis...')
     if audio is not None and not prompt:
         data=audio.getvalue(); h=hashlib.md5(data).hexdigest()
@@ -566,12 +607,34 @@ with tabs[1]:
                     else:
                         tool='computer'; result='Entendi que você quer uma ação no seu PC, mas ainda preciso do aplicativo, arquivo, pasta ou página específica. Diga exatamente o que devo abrir ou fazer.'
             else: tool,result=execute_tool(prompt)
-        context=honcho_context(prompt); st.session_state.honcho_context=context
+        # Caminho rápido: comandos locais e ferramentas determinísticas não passam pelo LLM.
+        # Isso evita uma segunda chamada à OpenRouter só para dizer 'feito'.
+        needs_memory_context = bool(HONCHO_API_KEY and (
+            tool in ('memory','memory_search') or
+            any(k in prompt.lower() for k in ('memória','memoria','lembra','lembrar','lembre'))
+        ))
+        context=honcho_context(prompt) if needs_memory_context else ''
+        st.session_state.honcho_context=context
         st.session_state.last_action={'skills':skills,'tool':tool,'result':result,'session_id':st.session_state.session_id}
         with st.chat_message('assistant'):
             try:
-                answer=(team_answer if team_answer else ask_llm(prompt,result,context))+confirm_note; st.markdown(answer); st.session_state.messages.append({'role':'assistant','content':answer}); honcho_save_turn(prompt,answer)
-                if spoken_in or st.session_state.get('speak_on',True):
+                if team_answer:
+                    answer=team_answer + confirm_note
+                elif tool == 'computer':
+                    answer=format_pc_fast(result) + confirm_note
+                elif tool in ('calculator','time','task','complete_task','delete_task','memory') and result is not None:
+                    answer=str(result) + confirm_note
+                else:
+                    answer=ask_llm(prompt,result,context) + confirm_note
+                st.markdown(answer)
+                st.session_state.messages.append({'role':'assistant','content':answer})
+                # Salvar cada turno no Honcho pode adicionar uma chamada de rede ao envio.
+                # Por padrão, salvamos memória explícita; para registrar todo o chat, ative HONCHO_SAVE_ALL_TURNS=1.
+                save_all_honcho=os.getenv('HONCHO_SAVE_ALL_TURNS','0').strip().lower() in ('1','true','yes','on')
+                if HONCHO_API_KEY and (save_all_honcho or needs_memory_context):
+                    try: honcho_save_turn(prompt,answer)
+                    except Exception: pass
+                if spoken_in or st.session_state.get('speak_on',False):
                     try: speak(answer)
                     except Exception as e: st.caption(f'Áudio indisponível: {e}')
             except Exception as e: st.error(f'Erro no Jarvis: {e}')

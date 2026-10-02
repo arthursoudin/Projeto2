@@ -22,3 +22,14 @@ PDF, DOCX, XLSX/XLS, CSV, TXT, MD, JSON, HTML/XML, RTF, PPTX/PPT, PNG/JPG/JPEG/W
 - `upload_file`, `create_zip` e `create_workspace` são risco médio e passam pela política de aprovação quando configurada.
 - `download_file`, `document_info` e `search_files` são leitura/consulta.
 - Exclusão continua protegida e bloqueada por padrão.
+
+
+## V14.5.1 — Correção + modo rápido
+- Corrigido `NameError` causado por `unicodeode/unidecode`; agora usa apenas `unicodedata`, sem dependência externa.
+- Comandos do PC não chamam o LLM para gerar a confirmação: a resposta é montada localmente após o resultado real do agente.
+- Polling do Local Agent reduzido de 1s para 0,2s.
+- Honcho não é consultado em toda mensagem; só em mensagens relacionadas à memória.
+- Honcho não salva todo turno por padrão; use `HONCHO_SAVE_ALL_TURNS=1` se quiser esse comportamento.
+- Voz fica desligada por padrão para não atrasar a resposta; pode ativar no painel Voz ou usar `JARVIS_VOICE_DEFAULT=1`.
+- `OPENROUTER_MAX_TOKENS` controla o tamanho máximo das respostas (padrão 600).
+- Estado compartilhado é atualizado no máximo a cada 8 segundos para reduzir leituras de rede.
